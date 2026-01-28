@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: file:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cubism.live2d.com blob:; img-src * file: data: blob:; connect-src * file:; worker-src 'self' blob:;">
+    <title>Avatar</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        #avatar-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        #avatar-container canvas {
+            display: block;
+        }
+    </style>
+    <!-- Load PIXI.js v7 from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js"></script>
+    <!-- Load Live2D Cubism 4 Core SDK (required for .model3.json / .moc3 files) -->
+    <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+    <!-- Load pixi-live2d-display Cubism 4 variant (supports Cubism 3 & 4 models) -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
+</head>
+
+<body>
+    <div id="avatar-container"></div>
+    <script src="avatar-renderer-browser.js"></script>
+</body>
+
+</html>
