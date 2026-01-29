@@ -139,7 +139,7 @@ export const TONE_EXPRESSIONS = Object.freeze({
 });
 
 // Default model path
-export const DEFAULT_MODEL_PATH = 'D:/Waifu/2D_Livemodel/tuzi mian.model3.json';
+export const DEFAULT_MODEL_PATH = '../2D_Livemodel/tuzi mian.model3.json';
 
 // Avatar window settings
 export const WINDOW_CONFIG = Object.freeze({
