@@ -25,5 +25,6 @@ contextBridge.exposeInMainWorld('avatarAPI', {
     },
 
     // Configuration
-    getModelPath: () => ipcRenderer.invoke('get-avatar-model-path')
+    getModelPath: () => ipcRenderer.invoke('get-avatar-model-path'),
+    moveWindow: (pos) => ipcRenderer.send('avatar-move-window', pos)
 });

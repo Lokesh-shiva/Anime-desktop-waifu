@@ -225,6 +225,15 @@ ipcMain.handle('get-avatar-model-path', async () => {
     return DEFAULT_MODEL_PATH;
 });
 
+/**
+ * Move avatar window
+ */
+ipcMain.on('avatar-move-window', (event, { x, y }) => {
+    if (avatarWindow && !avatarWindow.isDestroyed()) {
+        avatarWindow.setPosition(Math.round(x), Math.round(y));
+    }
+});
+
 // ============================================
 // TTS Server Handlers
 // ============================================

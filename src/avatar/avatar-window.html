@@ -31,6 +31,18 @@
         #avatar-container canvas {
             display: block;
         }
+
+        /* Native Drag Classes */
+        .drag-mode {
+            -webkit-app-region: drag;
+            /* user-select: none; is good for drag regions */
+            user-select: none;
+        }
+
+        .no-drag {
+            -webkit-app-region: no-drag;
+            cursor: pointer;
+        }
     </style>
     <!-- Load PIXI.js v7 from CDN -->
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js"></script>
@@ -42,6 +54,44 @@
 
 <body>
     <div id="avatar-container"></div>
+
+    <!-- UI Overlay -->
+    <div id="ui-layer"
+        style="position: absolute; top: 10px; right: 10px; z-index: 1000; opacity: 0; transition: opacity 0.3s;">
+        <div id="menu-btn" class="no-drag"
+            style="cursor: pointer; background: rgba(0,0,0,0.5); color: white; padding: 5px; border-radius: 50%;">
+            ⚙️
+        </div>
+        <div id="menu-options" class="no-drag"
+            style="display: none; position: absolute; top: 30px; right: 0; background: rgba(0,0,0,0.8); border-radius: 5px; padding: 5px; width: 120px;">
+            <div id="mode-toggle"
+                style="color: white; padding: 5px; cursor: pointer; font-family: sans-serif; font-size: 12px; user-select: none;">
+                Example Text
+            </div>
+            <div id="reset-btn"
+                style="color: #ff9999; padding: 5px; cursor: pointer; font-family: sans-serif; font-size: 12px; border-top: 1px solid #444; user-select: none;">
+                Reset Position
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simple UI hover visibility
+        document.body.addEventListener('mouseenter', () => {
+            document.getElementById('ui-layer').style.opacity = '1';
+        });
+        document.body.addEventListener('mouseleave', () => {
+            document.getElementById('ui-layer').style.opacity = '0';
+        });
+
+        const menuBtn = document.getElementById('menu-btn');
+        const menuOptions = document.getElementById('menu-options');
+
+        menuBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent boop
+            menuOptions.style.display = menuOptions.style.display === 'none' ? 'block' : 'none';
+        });
+    </script>
     <script src="avatar-renderer-browser.js"></script>
 </body>
 

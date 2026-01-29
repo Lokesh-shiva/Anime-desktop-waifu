@@ -48,6 +48,7 @@ A visual companion that reacts to your conversation.
 - Responds to your messages with expressions and motions
 - Follows your cursor for a sense of awareness
 - Reacts to interaction (try giving her a gentle boop!)
+- **Drag Mode**: Move her anywhere on your screen using the toggle menu
 - Transparent overlay that sits on your desktop
 
 The avatar is a visual layer — she displays what the AI is "feeling," but she's not the AI itself.
@@ -79,6 +80,7 @@ You decide how the companion behaves.
 
 - Toggle avatar visibility
 - Toggle voice responses
+- **Drag vs. Interact Mode**: Toggle between moving the window or interacting with the avatar
 - Switch AI modes (local/cloud/hybrid)
 - Adjust response length and behavior
 - All settings accessible from the settings panel

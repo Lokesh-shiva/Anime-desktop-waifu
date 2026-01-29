@@ -79,6 +79,8 @@ let app = null;
 let model = null;
 let availableParams = new Set();
 let isInitialized = false;
+let initialModelWidth = 0;
+let initialModelHeight = 0;
 
 // Animation state
 let animState = {
@@ -118,6 +120,11 @@ let boopState = {
     timer: 0,
     duration: 0.8,
     bouncePhase: 0
+};
+
+// Window drag state
+let dragState = {
+    enabled: false
 };
 
 // Sentiment expressions for text-based reactions
@@ -244,8 +251,17 @@ async function init() {
         // Discover available parameters
         discoverParameters();
 
+        // Store initial dimensions for scaling - use internal model for stability
+        initialModelWidth = model.internalModel.width;
+        initialModelHeight = model.internalModel.height;
+
+        console.log('[Avatar] Initial dimensions:', initialModelWidth, initialModelHeight);
+
         // Position and scale model
         fitModelToView(container);
+
+        // Init UI
+        initUI();
 
         // Add to stage
         app.stage.addChild(model);
@@ -375,12 +391,18 @@ function fitModelToView(container) {
     const containerWidth = container.clientWidth;
     const containerHeight = container.clientHeight;
 
+    // Use internal dimensions (unscaled) as the source of truth
+    const width = initialModelWidth || model.internalModel.width;
+    const height = initialModelHeight || model.internalModel.height;
+
+    // Calculate scale to fit container
     const scale = Math.min(
-        containerWidth / model.width,
-        containerHeight / model.height
+        containerWidth / width,
+        containerHeight / height
     ) * 0.9;
 
     model.scale.set(scale);
+    console.log(`[Avatar] Resize: Container ${containerWidth}x${containerHeight}, Scale ${scale}`);
     model.x = containerWidth / 2;
     model.y = containerHeight;
     model.anchor.set(0.5, 1);
@@ -589,6 +611,22 @@ function updateCursorTracking(dt) {
     setParameter(PARAM_IDS.ANGLE_Y, currentCursorInfluence.headY, true);
 }
 
+function handleMouseDown(e) {
+    if (e.button !== 0) return; // Only left click
+
+    // Only drag if enabled
+    if (dragState.enabled) {
+        dragState.isDragging = true;
+        dragState.offsetX = e.clientX;
+        dragState.offsetY = e.clientY;
+        dragState.hasMoved = false;
+    }
+}
+
+function handleMouseUp(e) {
+    dragState.isDragging = false;
+}
+
 function handleMouseMove(e) {
     const container = document.getElementById('avatar-container');
     if (!container) return;
@@ -653,7 +691,53 @@ function updateBoop(dt) {
 }
 
 function handleClick(e) {
+    // If dragging is enabled, clicking does NOT boop (unless we want it to?)
+    // User requested "either dragging ... or boop"
+    if (dragState.enabled) return;
+
     triggerBoop();
+}
+
+// ================================
+// UI Handling
+// ================================
+
+function initUI() {
+    const toggleBtn = document.getElementById('mode-toggle');
+    const resetBtn = document.getElementById('reset-btn');
+
+    if (toggleBtn) {
+        updateToggleText(toggleBtn);
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dragState.enabled = !dragState.enabled;
+            updateToggleText(toggleBtn);
+
+            // Toggle Drag Mode
+            if (dragState.enabled) {
+                document.body.classList.add('drag-mode');
+                document.body.style.cursor = 'default'; // cursor handling by OS
+            } else {
+                document.body.classList.remove('drag-mode');
+                document.body.style.cursor = 'default';
+            }
+        });
+    }
+
+    if (resetBtn) {
+        resetBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (window.avatarAPI?.moveWindow) {
+                // Reset to top-leftish
+                window.avatarAPI.moveWindow({ x: 50, y: 100 });
+            }
+        });
+    }
+}
+
+function updateToggleText(btn) {
+    btn.textContent = dragState.enabled ? '✅ Drag Mode' : '❌ Drag Mode (Interact)';
+    btn.style.color = dragState.enabled ? '#88ff88' : '#cccccc';
 }
 
 // ================================
