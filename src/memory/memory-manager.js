@@ -352,10 +352,9 @@ Analyze and update memory.`;
 
             // Call Brain with preferences:
             // 1. Override system prompt to be the Analyzer
-            // 2. Prefer LOCAL model to save costs/latency
+            // 2. Use default model mode (allows cloud if configured)
             const response = await BrainRouter.generate(analysisPrompt, {
-                systemInstruction: MEMORY_ANALYZER_PROMPT,
-                preferLocal: true // CRITICAL: Use local model for background work
+                systemInstruction: MEMORY_ANALYZER_PROMPT
             });
 
             // Parse result with robustness for local models

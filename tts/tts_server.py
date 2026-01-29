@@ -24,37 +24,67 @@ active_engine_type = "system"
 
 # --- TTS Engines ---
 
+import threading
+
+import threading
+import queue
+
+import comtypes.client
+
 class SystemTTS:
     def __init__(self):
-        try:
-            # Initialize pyttsx3
-            # Note: pyttsx3 is not thread-safe, so we need to be careful
-            # We will re-initialize for each request or use a lock if needed
-            # For now, we'll try a fresh init per request or manage a global instance carefully
-            self.engine = pyttsx3.init()
-            logger.info("System TTS (pyttsx3) initialized")
-        except Exception as e:
-            logger.error(f"Failed to initialize System TTS: {e}")
-            raise e
+        # We don't need a persistent object for SAPI if we init per request properly
+        # But to be safe and fast, we can try to keep one or just init when needed.
+        # SAPI is COM based, so thread apartment matters.
+        logger.info("System TTS (Direct SAPI5) initialized mode")
 
     def synthesize(self, text: str, output_file: str):
-        """Synthesize text to file using system TTS"""
-        # Re-init safely for this call to avoid loop conflicts
-        engine = pyttsx3.init()
+        """Synthesize text to file using Direct SAPI5"""
         
-        # Try to set a female voice (Zira)
-        voices = engine.getProperty('voices')
-        for voice in voices:
-            if 'zira' in voice.name.lower() or 'female' in voice.name.lower():
-                engine.setProperty('voice', voice.id)
-                break
-        
-        # Slightly faster rate for natural feel (default is ~200)
-        engine.setProperty('rate', 180)
-        
-        engine.save_to_file(text, output_file)
-        engine.runAndWait()
-        return output_file
+        # Initialize COM in this thread
+        comtypes.CoInitialize()
+        try:
+            # Create SAPI SpVoice object
+            voice = comtypes.client.CreateObject("SAPI.SpVoice")
+            
+            # Set voice (try to find Zira/Female)
+            # Get available voices
+            voices = voice.GetVoices()
+            target_voice = None
+            
+            for i in range(voices.Count):
+                v = voices.Item(i)
+                desc = v.GetDescription()
+                if 'zira' in desc.lower() or 'female' in desc.lower():
+                    target_voice = v
+                    break
+            
+            if target_voice:
+                voice.Voice = target_voice
+                
+            # Set fast rate (-10 to 10)
+            voice.Rate = 1 # Slightly faster
+            
+            # Create File Stream
+            stream = comtypes.client.CreateObject("SAPI.SpFileStream")
+            stream.Open(output_file, 3, False) # 3 = SSFMCreateForWrite
+            
+            # Connect voice to stream
+            voice.AudioOutputStream = stream
+            
+            # Speak (Flags: 0 = Default)
+            voice.Speak(text, 0)
+            
+            # Close stream
+            stream.Close()
+            
+            return output_file
+            
+        except Exception as e:
+            logger.error(f"SAPI5 synthesis failed: {e}")
+            raise e
+        finally:
+            comtypes.CoUninitialize()
 
 class StyleTTS2Wrapper:
     def __init__(self):
@@ -153,12 +183,9 @@ async def synthesize(request: SynthesisRequest):
                 logger.error(f"StyleTTS2 error: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
         else:
-            # System TTS
-            try:
-                await asyncio.to_thread(system_tts.synthesize, request.text, temp_file)
-            except Exception as e:
-                logger.error(f"System TTS error: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+            # System TTS (Direct SAPI5)
+            # Run in thread to keep API responsive, even though SAPI is fast
+            await asyncio.to_thread(system_tts.synthesize, request.text, temp_file)
 
         # Read back the file
         if not os.path.exists(temp_file) or os.path.getsize(temp_file) == 0:

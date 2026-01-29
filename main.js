@@ -138,6 +138,21 @@ app.on('will-quit', () => {
     cleanupTTSServer();
 });
 
+// Handle Ctrl+C from terminal
+process.on('SIGINT', () => {
+    console.log('[Main] Received SIGINT. Cleaning up...');
+    cleanupTTSServer();
+    app.quit();
+    process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+    console.log('[Main] Received SIGTERM. Cleaning up...');
+    cleanupTTSServer();
+    app.quit();
+    process.exit(0);
+});
+
 app.on('activate', () => {
     if (mainWindow === null) {
         createWindow();
