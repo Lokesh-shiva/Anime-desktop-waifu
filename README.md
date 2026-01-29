@@ -191,7 +191,7 @@ The app needs an AI to generate responses. You have three options:
 1. Download and install [Ollama](https://ollama.ai/)
 2. Open a terminal and run:
    ```bash
-   ollama pull llama3.2
+   ollama pull phi4-mini:3.8b
    ```
 3. Ollama runs in the background automatically
 4. In the app, select **"Local Only"** in the settings
@@ -248,7 +248,7 @@ pip install styletts2
 For fully offline AI:
 
 1. Install [Ollama](https://ollama.ai/)
-2. Pull a model: `ollama pull llama3.2`
+2. Pull a model: `ollama pull phi4-mini:3.8b`
 3. Ollama runs in the background automatically
 
 If Ollama isn't running, the app will fall back to cloud mode (if configured).
