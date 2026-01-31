@@ -10,7 +10,7 @@
  */
 
 // Default model path
-const DEFAULT_MODEL_PATH = '../2D_Livemodel/tuzi mian.model3.json';
+const DEFAULT_MODEL_PATH = '../2D_Livemodel/tuzi_mian/tuzi mian.model3.json';
 
 // Animation timing configuration
 const TIMING = {

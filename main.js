@@ -7,7 +7,7 @@ let mainWindow = null;
 let avatarWindow = null;
 
 // Default model path
-const DEFAULT_MODEL_PATH = path.join(__dirname, '2D_Livemodel', 'tuzi mian.model3.json');
+const DEFAULT_MODEL_PATH = path.join(__dirname, '2D_Livemodel', 'tuzi_mian', 'tuzi mian.model3.json');
 
 function createWindow() {
     mainWindow = new BrowserWindow({
