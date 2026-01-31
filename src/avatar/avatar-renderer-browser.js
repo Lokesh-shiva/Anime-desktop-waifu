@@ -159,80 +159,192 @@ let specialAnimState = {
     duration: 1.2
 };
 
+// ============================================
+// Capability Detection System
+// ============================================
+
+let capabilities = {
+    // Standard Expressions
+    canBlink: false,
+    canBreath: false,
+    canSwayHead: false,
+    canTiltHead: false,
+    canMouthToggle: false, // Open/Close only
+    canMouthShape: false,  // Form/A-E-I-O-U
+    canSmile: false,
+
+    // Body Movement
+    canMoveBodyX: false,
+    canMoveBodyY: false,
+    canMoveBodyZ: false,
+
+    // Extended Capabilities (Hands/Arms)
+    canMoveArmL: false,
+    canMoveArmR: false,
+    canMoveHandL: false,
+    canMoveHandR: false,
+    canShrug: false,
+
+    // Emotions/Extras
+    canBlush: false,
+    canTear: false,
+
+    // Special
+    hasPhysics: false,
+
+    // Full parameter set for reference
+    params: new Set()
+};
+
+const EXTENDED_PARAMS = {
+    // Arms
+    ARM_L: ['ParamArmL', 'ParamArmLA', 'ParamArmLZ'],
+    ARM_R: ['ParamArmR', 'ParamArmRA', 'ParamArmRZ'],
+
+    // Hands
+    HAND_L: ['ParamHandL', 'ParamHandLA', 'ParamWristL'],
+    HAND_R: ['ParamHandR', 'ParamHandRA', 'ParamWristR'],
+
+    // Shoulders
+    SHOULDER: ['ParamShoulder', 'ParamShoulderL', 'ParamShoulderR'],
+
+    // Cheeks
+    CHEEK: ['ParamCheek', 'ParamBlush', 'ParamCheekBlush'],
+
+    // Tears
+    TEAR: ['ParamTear', 'ParamTearL', 'ParamTearR']
+};
+
+function detectCapabilities(model) {
+    // Reset capabilities
+    capabilities = {
+        canBlink: false, canBreath: false, canSwayHead: false,
+        canTiltHead: false, canMouthToggle: false, canMouthShape: false,
+        canSmile: false, canMoveBodyX: false, canMoveBodyY: false,
+        canMoveBodyZ: false, canMoveArmL: false, canMoveArmR: false,
+        canMoveHandL: false, canMoveHandR: false, canShrug: false,
+        canBlush: false, canTear: false, hasPhysics: false,
+        params: new Set()
+    };
+
+    if (!model?.internalModel?.coreModel) return;
+
+    // Discover all parameters first
+    discoverParameters(); // Populates availableParams global
+    capabilities.params = new Set(availableParams);
+
+    // Standard Checks
+    capabilities.canBlink = hasParameter(PARAM_IDS.EYE_L_OPEN) || hasParameter(PARAM_IDS.EYE_R_OPEN);
+    capabilities.canBreath = hasParameter(PARAM_IDS.BREATH);
+    capabilities.canSwayHead = hasParameter(PARAM_IDS.ANGLE_Z);
+    capabilities.canTiltHead = hasParameter(PARAM_IDS.ANGLE_Z) && hasParameter(PARAM_IDS.ANGLE_X);
+    capabilities.canMouthToggle = hasParameter(PARAM_IDS.MOUTH_OPEN_Y);
+    capabilities.canMouthShape = hasParameter(PARAM_IDS.MOUTH_FORM);
+    capabilities.canSmile = hasParameter(PARAM_IDS.EYE_L_SMILE) || hasParameter(PARAM_IDS.EYE_R_SMILE);
+
+    capabilities.canMoveBodyX = hasParameter(PARAM_IDS.BODY_ANGLE_X);
+    capabilities.canMoveBodyY = hasParameter(PARAM_IDS.BODY_ANGLE_Y);
+    capabilities.canMoveBodyZ = hasParameter(PARAM_IDS.BODY_ANGLE_Z);
+
+    // Extended Checks
+    capabilities.canMoveArmL = EXTENDED_PARAMS.ARM_L.some(p => hasAnyParameter(p));
+    capabilities.canMoveArmR = EXTENDED_PARAMS.ARM_R.some(p => hasAnyParameter(p));
+    capabilities.canMoveHandL = EXTENDED_PARAMS.HAND_L.some(p => hasAnyParameter(p));
+    capabilities.canMoveHandR = EXTENDED_PARAMS.HAND_R.some(p => hasAnyParameter(p));
+    capabilities.canShrug = EXTENDED_PARAMS.SHOULDER.some(p => hasAnyParameter(p));
+    capabilities.canBlush = EXTENDED_PARAMS.CHEEK.some(p => hasAnyParameter(p));
+    capabilities.canTear = EXTENDED_PARAMS.TEAR.some(p => hasAnyParameter(p));
+
+    // Physics Check
+    capabilities.hasPhysics = !!model.internalModel.physics;
+
+    capabilities.hasPhysics = !!model.internalModel.physics;
+
+    console.log('[Avatar] Capability Profile Rebuilt:', capabilities);
+
+    // Report to main process
+    if (window.avatarAPI?.sendCapabilities) {
+        window.avatarAPI.sendCapabilities(capabilities);
+    }
+}
+
+// Helper to check partial matches or exact matches for extended params
+function hasAnyParameter(pattern) {
+    for (const param of capabilities.params) {
+        if (param === pattern || param.includes(pattern)) return true;
+    }
+    return false;
+}
 function randomBlinkInterval() {
     return TIMING.BLINK_INTERVAL_MIN +
         Math.random() * (TIMING.BLINK_INTERVAL_MAX - TIMING.BLINK_INTERVAL_MIN);
 }
 
-/**
- * Initialize the avatar
- */
+// ============================================
+// Core Engine & Model Management
+// ============================================
+
 async function init() {
     if (isInitialized) return;
 
-    console.log('[Avatar] Initializing...');
+    console.log('[Avatar] Initializing Engine...');
 
     const container = document.getElementById('avatar-container');
-    if (!container) {
-        console.error('[Avatar] Container not found');
-        return;
-    }
+    if (!container) return;
 
-    // Check for required globals
-    if (typeof PIXI === 'undefined') {
-        console.error('[Avatar] PIXI not loaded');
-        return;
-    }
-
-    console.log('[Avatar] PIXI version:', PIXI.VERSION);
-
-    // Get Live2DModel from pixi-live2d-display
-    const Live2DModel = PIXI.live2d?.Live2DModel;
-    if (!Live2DModel) {
-        console.error('[Avatar] Live2DModel not available');
-        console.log('[Avatar] PIXI.live2d:', PIXI.live2d);
-        return;
-    }
-
-    console.log('[Avatar] Creating PIXI app...');
-
-    // Create PIXI app - v7 uses constructor with options
+    // init PIXI App
     try {
         app = new PIXI.Application({
             backgroundAlpha: 0,
-            resizeTo: container,
-            antialias: true,
+            resizeTo: window,
             resolution: window.devicePixelRatio || 1,
             autoDensity: true
         });
+        container.appendChild(app.view);
+
+        // Add ticker
+        app.ticker.add(onTick);
+
+        // Setup listener for model changing
+        if (window.avatarAPI?.onLoadModel) {
+            window.avatarAPI.onLoadModel((path) => {
+                loadModel(path);
+            });
+        }
+
     } catch (e) {
-        console.error('[Avatar] PIXI Application creation failed:', e);
+        console.error('[Avatar] Engine init failed:', e);
         return;
     }
 
-    // PIXI v7 uses app.view
-    const canvas = app.view;
-    if (canvas) {
-        container.appendChild(canvas);
-    } else {
-        console.error('[Avatar] No canvas available');
-        return;
+    // Load initial model
+    const path = await getModelPath();
+    await loadModel(path);
+
+    initUI();
+    isInitialized = true;
+}
+
+async function loadModel(modelPath) {
+    if (!app) return;
+
+    console.log('[Avatar] Loading model...', modelPath);
+
+    // Unload existing
+    if (model) {
+        app.stage.removeChild(model);
+        model.destroy({ children: true, texture: true, baseTexture: true });
+        model = null;
+        availableParams.clear();
     }
 
-    console.log('[Avatar] PIXI app created');
-
-    // Load model
-    const modelPath = await getModelPath();
     if (!modelPath) {
-        console.warn('[Avatar] No model path, showing empty');
-        isInitialized = true;
+        console.warn('[Avatar] No path provided for loadModel');
         return;
     }
 
     try {
-        console.log('[Avatar] Loading model:', modelPath);
-
-        // Register ticker
+        const Live2DModel = PIXI.live2d.Live2DModel;
         Live2DModel.registerTicker(PIXI.Ticker);
 
         model = await Live2DModel.from(modelPath, {
@@ -240,41 +352,24 @@ async function init() {
             autoUpdate: true
         });
 
-        if (!model) {
-            console.warn('[Avatar] Model failed to load');
-            isInitialized = true;
-            return;
-        }
+        if (!model) throw new Error('Model creation failed');
 
-        console.log('[Avatar] Model loaded successfully');
+        // Success
+        console.log('[Avatar] Model loaded.');
 
-        // Discover available parameters
-        discoverParameters();
+        // Detect Capabilities
+        detectCapabilities(model);
 
-        // Store initial dimensions for scaling - use internal model for stability
+        // Position
         initialModelWidth = model.internalModel.width;
         initialModelHeight = model.internalModel.height;
+        fitModelToView(document.getElementById('avatar-container'));
 
-        console.log('[Avatar] Initial dimensions:', initialModelWidth, initialModelHeight);
-
-        // Position and scale model
-        fitModelToView(container);
-
-        // Init UI
-        initUI();
-
-        // Add to stage
         app.stage.addChild(model);
 
-        // Start animation loop
-        app.ticker.add(onTick);
-
-        isInitialized = true;
-        console.log('[Avatar] Ready');
-
-    } catch (error) {
-        console.error('[Avatar] Failed to load model:', error);
-        isInitialized = true;
+    } catch (e) {
+        console.error('[Avatar] Failed to load model:', e);
+        // Fallback or Error UI could go here
     }
 }
 
@@ -446,7 +541,10 @@ function interpolateValues(dt) {
 }
 
 function updateBlink(dt) {
+    if (!capabilities.canBlink) return;
+
     animState.blinkTimer += dt;
+    /* ... rest of logic ... */
 
     if (animState.isBlinking) {
         const progress = animState.blinkTimer / TIMING.BLINK_DURATION;
@@ -471,6 +569,8 @@ function updateBlink(dt) {
 }
 
 function updateBreathing(dt) {
+    if (!capabilities.canBreath) return;
+
     animState.breathPhase += dt / TIMING.BREATH_CYCLE * Math.PI * 2;
     if (animState.breathPhase > Math.PI * 2) animState.breathPhase -= Math.PI * 2;
 
@@ -483,10 +583,29 @@ function updateHeadSway(dt) {
     if (animState.swayPhase > Math.PI * 2) animState.swayPhase -= Math.PI * 2;
 
     const swayValue = Math.sin(animState.swayPhase) * TIMING.IDLE_SWAY_AMPLITUDE;
-    setParameter(PARAM_IDS.ANGLE_Z, swayValue, true);
+
+    // Only apply if capability exists
+    if (capabilities.canSwayHead) {
+        setParameter(PARAM_IDS.ANGLE_Z, swayValue, true);
+    }
+
+    // Extended Sway: Arms/Hands breathing
+    if (capabilities.canMoveArmL) setExtendedParam('ParamArmL', swayValue * 0.1);
+    if (capabilities.canMoveArmR) setExtendedParam('ParamArmR', swayValue * -0.1);
+}
+
+// Helper for fuzzy parameter setting
+function setExtendedParam(baseName, value) {
+    for (const param of capabilities.params) {
+        if (param.includes(baseName)) {
+            setParameter(param, value, true);
+        }
+    }
 }
 
 function updateMouthSync(dt) {
+    if (!capabilities.canMouthToggle) return;
+
     animState.mouthPhase += dt / TIMING.MOUTH_CYCLE * Math.PI * 2;
     if (animState.mouthPhase > Math.PI * 2) animState.mouthPhase -= Math.PI * 2;
 
@@ -749,20 +868,39 @@ function applySentiment(sentiment) {
 
     console.log('[Avatar] Sentiment:', sentiment, expr);
 
-    // Apply base expression with immediate flag for instant feedback
-    setParameter(PARAM_IDS.EYE_L_SMILE, expr.eyeSmile, true);
-    setParameter(PARAM_IDS.EYE_R_SMILE, expr.eyeSmile, true);
+    // Apply base expression checks
+    if (capabilities.canSmile) {
+        setParameter(PARAM_IDS.EYE_L_SMILE, expr.eyeSmile, true);
+        setParameter(PARAM_IDS.EYE_R_SMILE, expr.eyeSmile, true);
+    }
+
     setParameter(PARAM_IDS.BROW_L_Y, expr.browY, true);
     setParameter(PARAM_IDS.BROW_R_Y, expr.browY, true);
-    setParameter(PARAM_IDS.MOUTH_FORM, expr.mouthForm, true);
 
-    if (expr.mouthOpen !== undefined) {
+    if (capabilities.canMouthShape) {
+        setParameter(PARAM_IDS.MOUTH_FORM, expr.mouthForm, true);
+    }
+
+    if (expr.mouthOpen !== undefined && capabilities.canMouthToggle) {
         setParameter(PARAM_IDS.MOUTH_OPEN_Y, expr.mouthOpen, true);
     }
 
-    if (expr.eyeOpen !== undefined) {
+    if (expr.eyeOpen !== undefined && capabilities.canBlink) {
+        // Only override eye open if we are not forced blinking
         setParameter(PARAM_IDS.EYE_L_OPEN, expr.eyeOpen, true);
         setParameter(PARAM_IDS.EYE_R_OPEN, expr.eyeOpen, true);
+    }
+
+    // Extended Reactions
+    if (expr.blush && capabilities.canBlush) {
+        setExtendedParam('ParamCheek', 1.0);
+        setExtendedParam('ParamBlush', 1.0);
+    } else {
+        // Reset blush if not needed
+        if (capabilities.canBlush) {
+            setExtendedParam('ParamCheek', 0);
+            setExtendedParam('ParamBlush', 0);
+        }
     }
 
     // Handle special animations
@@ -826,21 +964,44 @@ function updateSpecialAnim(dt) {
         return;
     }
 
-    // Wave animation (body sway + head nod)
+    // Wave animation (body sway + arm wave)
     if (expr.wave) {
-        const wavePhase = progress * Math.PI * 6;  // More waves
-        const waveAmount = Math.sin(wavePhase) * Math.exp(-progress * 1.5) * 12;  // Bigger sway
-        setParameter(PARAM_IDS.BODY_ANGLE_X, waveAmount, true);
-        // Add a friendly head nod
+        const wavePhase = progress * Math.PI * 6;
+        const waveAmount = Math.sin(wavePhase) * Math.exp(-progress * 1.5) * 12;
+
+        // Body sway
+        if (capabilities.canMoveBodyX) setParameter(PARAM_IDS.BODY_ANGLE_X, waveAmount, true);
+
+        // Head nod
         const nodAmount = Math.sin(progress * Math.PI * 4) * Math.exp(-progress * 2) * 8;
         setParameter(PARAM_IDS.ANGLE_Y, nodAmount, true);
+
+        // Arm Wave (Right Arm)
+        if (capabilities.canMoveArmR) {
+            const armWave = Math.sin(wavePhase) * 1.5; // -1 to 1 range approx
+            // Try specific arm params if available
+            setExtendedParam('ParamArmR', armWave);
+            setExtendedParam('ParamArmRZ', armWave * 30); // Rotate Z usually lifts arm
+            setExtendedParam('ParamHandR', Math.sin(wavePhase * 2)); // Hand flutter
+        }
     }
 
-    // Bounce animation (body bob)
+    // Bounce animation
     if (expr.bounce) {
-        const bouncePhase = progress * Math.PI * 8;  // More bounces
+        const bouncePhase = progress * Math.PI * 8;
         const bounceAmount = Math.abs(Math.sin(bouncePhase)) * Math.exp(-progress * 2) * 8;
         setParameter(PARAM_IDS.BODY_ANGLE_Y, bounceAmount, true);
+
+        // Arms bounce too
+        if (capabilities.canMoveArmL) setExtendedParam('ParamArmL', bounceAmount * 0.1);
+        if (capabilities.canMoveArmR) setExtendedParam('ParamArmR', bounceAmount * 0.1);
+    }
+
+    // Shrug (Confused)
+    if (specialAnimState.type === 'confused' && capabilities.canShrug) {
+        // Hold shoulders up
+        const shrugAmount = Math.sin(progress * Math.PI) * 1.0; // Arch shape 0->1->0
+        setExtendedParam('ParamShoulder', shrugAmount);
     }
 
     // Wink - restore eye after a bit
@@ -857,6 +1018,13 @@ function updateSpecialAnim(dt) {
         setParameter(PARAM_IDS.BODY_ANGLE_X, 0);
         setParameter(PARAM_IDS.BODY_ANGLE_Y, 0);
         setParameter(PARAM_IDS.ANGLE_Z, 0);
+
+        // Reset extended params
+        if (capabilities.canMoveArmR) {
+            setExtendedParam('ParamArmR', 0);
+            setExtendedParam('ParamArmRZ', 0);
+        }
+        if (capabilities.canShrug) setExtendedParam('ParamShoulder', 0);
     }
 }
 
@@ -889,8 +1057,12 @@ if (window.avatarAPI) {
 
     if (window.avatarAPI.onExternalMouthControl) {
         window.avatarAPI.onExternalMouthControl((active) => {
-            behaviors.mouthEnabled = !active; // Disable internal if external is active
-            if (!active) {
+            if (active) {
+                behaviors.mouthEnabled = false; // Disable internal loop
+            } else {
+                // Restore based on current state
+                const behavior = STATE_BEHAVIORS[currentState];
+                behaviors.mouthEnabled = behavior ? behavior.mouthEnabled : false;
                 setParameter(PARAM_IDS.MOUTH_OPEN_Y, 0, true);
             }
         });

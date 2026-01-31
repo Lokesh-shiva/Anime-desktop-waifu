@@ -11,5 +11,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // TTS control
     ttsSynthesize: (text, options) => ipcRenderer.invoke('tts-synthesize', text, options),
-    ttsHealth: () => ipcRenderer.invoke('tts-health')
+    ttsHealth: () => ipcRenderer.invoke('tts-health'),
+
+    // Model Management
+    getAvailableModels: () => ipcRenderer.invoke('get-available-models'),
+    changeAvatarModel: (path) => ipcRenderer.invoke('change-avatar-model', path),
+    getAvatarModelPath: () => ipcRenderer.invoke('get-avatar-model-path'),
+    onAvatarCapabilities: (callback) => ipcRenderer.on('avatar-capabilities', (_, caps) => callback(caps))
 });

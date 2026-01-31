@@ -218,11 +218,102 @@ ipcMain.on('avatar-signal', (event, { channel, data }) => {
 });
 
 /**
- * Get avatar model path
+ * Handle capabilities report from avatar
+ */
+ipcMain.on('avatar-capabilities', (event, caps) => {
+    // Forward to main window
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('avatar-capabilities', caps);
+    }
+});
+
+/**
+ * Get avatar model path from settings
  */
 ipcMain.handle('get-avatar-model-path', async () => {
-    // Could be extended to read from settings file
+    try {
+        const settingsPath = path.join(userDataPath, 'avatar-settings.json');
+        if (fs.existsSync(settingsPath)) {
+            const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+            if (settings.currentModelPath && fs.existsSync(settings.currentModelPath)) {
+                return settings.currentModelPath;
+            }
+        }
+    } catch (e) {
+        console.error('[Main] Failed to load avatar settings:', e);
+    }
     return DEFAULT_MODEL_PATH;
+});
+
+/**
+ * List available models
+ */
+ipcMain.handle('get-available-models', async () => {
+    const modelsDir = path.join(__dirname, '2D_Livemodel');
+    const models = [];
+
+    if (!fs.existsSync(modelsDir)) return models;
+
+    try {
+        const entries = fs.readdirSync(modelsDir, { withFileTypes: true });
+
+        for (const entry of entries) {
+            if (entry.isDirectory()) {
+                // Check inner directory for .model3.json
+                const subDir = path.join(modelsDir, entry.name);
+                const subFiles = fs.readdirSync(subDir);
+                const modelFile = subFiles.find(f => f.endsWith('.model3.json'));
+
+                if (modelFile) {
+                    models.push({
+                        name: entry.name,
+                        path: path.join(subDir, modelFile),
+                        // Look for a preview image commonly named 'preview.png' or similar
+                        preview: subFiles.find(f => f.match(/preview|icon|cover/i) && f.match(/\.png|\.jpg/i))
+                            ? path.join(subDir, subFiles.find(f => f.match(/preview|icon|cover/i) && f.match(/\.png|\.jpg/i)))
+                            : null
+                    });
+                }
+            }
+        }
+    } catch (e) {
+        console.error('[Main] Failed to scan models:', e);
+    }
+
+    return models;
+});
+
+/**
+ * Change avatar model
+ */
+ipcMain.handle('change-avatar-model', async (event, modelPath) => {
+    console.log('[Main] Switching model to:', modelPath);
+
+    // Validate path
+    if (!fs.existsSync(modelPath)) {
+        return { success: false, error: 'Model file not found' };
+    }
+
+    // Save preference
+    try {
+        const settingsPath = path.join(userDataPath, 'avatar-settings.json');
+        const settings = fs.existsSync(settingsPath)
+            ? JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))
+            : {};
+
+        settings.currentModelPath = modelPath;
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    } catch (e) {
+        console.error('[Main] Failed to save avatar preference:', e);
+    }
+
+    // Notify avatar window to reload
+    if (avatarWindow && !avatarWindow.isDestroyed()) {
+        avatarWindow.webContents.send('avatar-load-model', modelPath);
+        return { success: true };
+    }
+
+    return { success: false, error: 'Avatar window not active' };
 });
 
 /**

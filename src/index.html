@@ -43,6 +43,18 @@
         <label class="settings-label" for="api-key-input">API Key</label>
         <input type="password" id="api-key-input" placeholder="Enter Gemini API key" autocomplete="off">
       </div>
+
+      <!-- Avatar Model Selection -->
+      <div class="settings-group">
+        <label class="settings-label" for="model-select">Avatar Model</label>
+        <select id="model-select" class="settings-select">
+          <option value="" disabled selected>Loading...</option>
+        </select>
+        <div id="model-capabilities" class="capabilities-container hidden">
+          <!-- Badges injected here -->
+        </div>
+      </div>
+
       <div class="settings-group">
         <label class="checkbox-option">
           <input type="checkbox" id="avatar-toggle">

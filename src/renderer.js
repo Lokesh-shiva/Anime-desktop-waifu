@@ -38,6 +38,7 @@ const avatarToggle = document.getElementById('avatar-toggle');
 const voiceToggle = document.getElementById('voice-toggle');
 const ttsRadios = document.querySelectorAll('input[name="tts-engine"]');
 const voiceSettingsGroup = document.getElementById('voice-settings-group');
+const modelSelect = document.getElementById('model-select');
 
 // Typing rhythm tracking (for input sensitivity)
 let keyTimestamps = [];
@@ -283,6 +284,11 @@ function analyzeSentiment(query, response) {
         return 'embarrassed';
     }
 
+    // Explicit gesture triggers for testing
+    if (/\b(wave|waving)\b/i.test(query)) return 'greeting';
+    if (/\b(blush|blushing|shy)\b/i.test(query)) return 'love';
+    if (/\b(shrug|shrugging)\b/i.test(query)) return 'confused';
+
     return 'neutral';
 }
 
@@ -423,8 +429,129 @@ ttsRadios.forEach(radio => {
     });
 });
 
+// Model Select
+if (modelSelect) {
+    modelSelect.addEventListener('change', async (e) => {
+        const path = e.target.value;
+        if (path) {
+            console.log('[Renderer] Switching model to:', path);
+            const result = await window.electronAPI.changeAvatarModel(path);
+            if (!result.success) {
+                console.error('[Renderer] Failed to switch model:', result.error);
+                // Maybe show a toast
+            }
+        }
+    });
+}
+
+/**
+ * Load available models into dropdown
+ */
+async function loadModels() {
+    if (!modelSelect) return;
+
+    try {
+        const models = await window.electronAPI.getAvailableModels();
+        const currentPath = await window.electronAPI.getAvatarModelPath();
+
+        modelSelect.innerHTML = '';
+
+        if (models.length === 0) {
+            const option = document.createElement('option');
+            option.text = "No models found";
+            modelSelect.add(option);
+            modelSelect.disabled = true;
+            return;
+        }
+
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.path;
+            option.text = model.name;
+            option.selected = (model.path === currentPath) || (model.path.replace(/\\/g, '/') === currentPath.replace('file:///', ''));
+            modelSelect.add(option);
+        });
+
+    } catch (e) {
+        console.error('[Renderer] Failed to load models:', e);
+        modelSelect.innerHTML = '<option disabled>Error loading models</option>';
+    }
+}
+
+// Voice Events
+VoiceService.onStart(() => {
+    // Optional: ensure we are in responding state if not already
+    // but usually LLM response triggers this first
+});
+
+VoiceService.onEnd(() => {
+    if (getModelMode() !== MODEL_MODE.LOCAL_ONLY) { // For cloud, or just generally
+        // Transition back to IDLE when speech ends
+        // We use updateUI directly or state machine transition?
+        // StateMachine transition logs event, better.
+        // But we don't have a specific event for "SPEECH_END" in state-machine.js usually?
+        // Let's just force updateUI(STATES.IDLE) or check if we can add an event.
+        // Actually, let's just stick to updateUI(STATES.IDLE) for now as a "reset"
+        updateUI(STATES.IDLE);
+    } else {
+        // Local mode might behave differently? No, same logic.
+        updateUI(STATES.IDLE);
+    }
+});
+
 // Initialize
 initSettings();
+loadModels();
 IdlePresence.init(presenceIndicator);
 AvatarBridge.init();
+// Start in IDLE
 updateUI(STATES.IDLE, null);
+
+// Listen for Capabilities
+if (window.electronAPI && window.electronAPI.onAvatarCapabilities) {
+    window.electronAPI.onAvatarCapabilities((caps) => {
+        renderCapabilities(caps);
+    });
+}
+
+/**
+ * Render capability badges
+ */
+function renderCapabilities(caps) {
+    const container = document.getElementById('model-capabilities');
+    if (!container) return;
+
+    container.classList.remove('hidden');
+    container.innerHTML = '';
+
+    // Badges config
+    const badges = [
+        { key: 'canBlink', label: '👁️ Blink' },
+        { key: 'canSmile', label: '😊 Smile' },
+        { key: 'canMoveArmL', label: '👋 Arms' },
+        { key: 'canBlush', label: '😳 Blush' },
+        { key: 'canShrug', label: '🤷 Shrug' },
+        { key: 'canMoveHandL', label: '✋ Hands' },
+        { key: 'hasPhysics', label: '🍃 Physics' }
+    ];
+
+    // Special logic to merge Arm/Hand L/R
+    const hasArms = caps.canMoveArmL || caps.canMoveArmR;
+    const hasHands = caps.canMoveHandL || caps.canMoveHandR;
+
+    addBadge(container, '👁️ Blink', caps.canBlink);
+    addBadge(container, '😊 Smile', caps.canSmile);
+    addBadge(container, '👋 Wave/Arms', hasArms);
+    addBadge(container, '✋ Hands', hasHands);
+    addBadge(container, '🤷 Shrug', caps.canShrug);
+    addBadge(container, '😳 Blush', caps.canBlush);
+    addBadge(container, '🍃 Physics', caps.hasPhysics);
+}
+
+function addBadge(container, label, active) {
+    if (!active) return;
+    const badge = document.createElement('span');
+    badge.className = 'cap-badge active';
+    badge.textContent = label;
+    container.appendChild(badge);
+}

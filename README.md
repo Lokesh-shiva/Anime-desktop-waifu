@@ -63,6 +63,26 @@ Optional spoken responses to messages.
 
 > **Note**: System TTS sounds robotic. Anime-style neural voices are planned for future updates.
 
+### 🎭 Advanced Avatar Features (New!)
+
+The avatar system has been upgraded to support dynamic loading and advanced interactions.
+
+- **Multi-Model Support**:
+    - Place any `.model3.json` Live2D model in the `2D_Livemodel` folder.
+    - Switch between models instantly in **Settings**.
+    - The app automatically scans and lists available models.
+
+- **Smart Capability Detection**:
+    - The system analyzes each model's parameters automatically.
+    - **Capability Badges**: Settings panel shows you what the current model can do (e.g., 👋 Arms, 😳 Blush, 🤷 Shrug).
+    - If a model lacks "arms", the avatar won't try to wave, preventing broken animations.
+
+- **Context-Aware Gestures**:
+    - **Wave**: Say "Hi" or "Bye" -> Avatar waves (if supported).
+    - **Blush**: Say "I love you" or "You're cute" -> Avatar blushes.
+    - **Shrug**: Say "I'm confused" or "I don't know" -> Avatar shrugs.
+    - **Bounce/Laugh**: Type "LOL" or "Haha" -> Avatar bounces joyfully.
+
 ### 💾 Intelligent Memory
 
 Remembers things naturally, forgets gracefully.
