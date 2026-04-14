@@ -109,7 +109,8 @@ function updateUI(state, payload) {
             // Trigger voice if enabled
             if (isVoiceEnabled()) {
                 const spoken = typeof payload === 'string' ? payload : (payload?.text || '');
-                if (spoken) VoiceService.speak(spoken);
+                const emotion = payload?.emotion || null;
+                if (spoken) VoiceService.speak(spoken, emotion);
             }
             break;
     }

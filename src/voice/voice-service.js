@@ -30,9 +30,10 @@ export const VoiceService = {
 
     /**
      * Synthesize and speak text
-     * @param {string} text 
+     * @param {string} text
+     * @param {Object} [emotion] - Emotion object {label, intensity} from LLM response
      */
-    async speak(text) {
+    async speak(text, emotion = null) {
         console.log('[Voice] speak() called');
 
         if (!isVoiceEnabled()) {
@@ -61,7 +62,7 @@ export const VoiceService = {
                 }
                 const voiceId = getElevenLabsVoiceId() || DEFAULT_VOICE_ID;
                 console.log('[Voice] Calling ElevenLabs API, voice:', voiceId);
-                result = await elevenLabsSynthesize(text, { apiKey, voiceId });
+                result = await elevenLabsSynthesize(text, { apiKey, voiceId, emotion });
             } else {
                 console.log('[Voice] Calling ttsSynthesize IPC...');
                 try {
