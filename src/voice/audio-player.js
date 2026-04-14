@@ -11,10 +11,22 @@ export class AudioPlayer {
         this.onEndCallback = null;
         this.animationFrameId = null;
 
+        // Playback rate: 1.0 = normal, 0.85 = ~15% slower, 0.75 = noticeably soft/intimate
+        this.playbackRate = 0.82;
+
         // For amplitude analysis
         this.audioContext = null;
         this.analyser = null;
         this.sourceNode = null;
+    }
+
+    /**
+     * Set playback speed (0.5 - 1.0). Applied to every audio element on play.
+     * @param {number} rate
+     */
+    setPlaybackRate(rate) {
+        this.playbackRate = Math.max(0.5, Math.min(1.0, rate));
+        if (this.audio) this.audio.playbackRate = this.playbackRate;
     }
 
     /**
@@ -40,6 +52,7 @@ export class AudioPlayer {
 
             // Create Audio element
             this.audio = new Audio(dataUrl);
+            this.audio.playbackRate = this.playbackRate;
 
             // Set up event handlers
             this.audio.onended = () => {
