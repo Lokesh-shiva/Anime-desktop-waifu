@@ -74,27 +74,17 @@ const TONE_EXPRESSIONS = {
     energetic: { eyeSmile: 0.4, browY: 0.2, mouthForm: 0.3 }
 };
 
+import { AvatarController } from './AvatarController.js';
+
 // State
 let app = null;
 let model = null;
-let availableParams = new Set();
 let isInitialized = false;
 let initialModelWidth = 0;
 let initialModelHeight = 0;
 
-// Animation state
-let animState = {
-    blinkTimer: 0,
-    nextBlinkTime: randomBlinkInterval(),
-    isBlinking: false,
-    breathPhase: 0,
-    mouthPhase: 0,
-    swayPhase: 0
-};
-
-// Current values for smooth interpolation
-let targetValues = {};
-let currentValues = {};
+// Central Orchestrator
+let avatarController = null;
 
 // Behavior flags
 let behaviors = {
@@ -114,175 +104,38 @@ let targetCursorInfluence = { eyeX: 0, eyeY: 0, headX: 0, headY: 0 };
 let currentCursorInfluence = { eyeX: 0, eyeY: 0, headX: 0, headY: 0 };
 let cursorTrackingEnabled = true;
 
-// Boop reaction state
-let boopState = {
-    isBooping: false,
-    timer: 0,
-    duration: 0.8,
-    bouncePhase: 0
-};
-
 // Window drag state
 let dragState = {
     enabled: false
 };
 
-// Sentiment expressions for text-based reactions
-const SENTIMENT_EXPRESSIONS = {
-    // Basic emotions
-    happy: { eyeSmile: 0.6, browY: 0.3, mouthForm: 0.5, mouthOpen: 0.2, eyeOpen: 1.0 },
-    excited: { eyeSmile: 0.8, browY: 0.5, mouthForm: 0.7, mouthOpen: 0.4, eyeOpen: 1.1 },
-    curious: { eyeSmile: 0.1, browY: 0.5, mouthForm: 0, mouthOpen: 0.15, eyeOpen: 1.1, headTilt: 8 },
-    sad: { eyeSmile: -0.2, browY: -0.4, mouthForm: -0.4, mouthOpen: 0, eyeOpen: 0.7 },
-    confused: { eyeSmile: 0, browY: 0.3, mouthForm: -0.2, mouthOpen: 0.1, eyeOpen: 0.9, headTilt: -5 },
-    surprised: { eyeSmile: 0.2, browY: 0.7, mouthForm: 0.2, mouthOpen: 0.6, eyeOpen: 1.3 },
-    neutral: { eyeSmile: 0, browY: 0, mouthForm: 0, mouthOpen: 0, eyeOpen: 1.0 },
-
-    // Special reactions
-    greeting: { eyeSmile: 0.7, browY: 0.4, mouthForm: 0.6, mouthOpen: 0.3, eyeOpen: 1.1, wave: true },
-    farewell: { eyeSmile: 0.5, browY: 0.2, mouthForm: 0.4, mouthOpen: 0.1, eyeOpen: 0.9, wave: true },
-    laugh: { eyeSmile: 1.0, browY: 0.3, mouthForm: 0.8, mouthOpen: 0.5, eyeOpen: 0.7, bounce: true },
-    thinking: { eyeSmile: 0, browY: 0.2, mouthForm: 0.1, mouthOpen: 0, eyeOpen: 0.9, lookUp: true },
-    love: { eyeSmile: 0.9, browY: 0.3, mouthForm: 0.6, mouthOpen: 0.2, eyeOpen: 0.8, blush: true },
-    proud: { eyeSmile: 0.5, browY: 0.4, mouthForm: 0.5, mouthOpen: 0.1, eyeOpen: 1.0, headUp: true },
-    embarrassed: { eyeSmile: 0.3, browY: -0.2, mouthForm: 0.2, mouthOpen: 0.1, eyeOpen: 0.8, blush: true, lookAway: true },
-    playful: { eyeSmile: 0.6, browY: 0.3, mouthForm: 0.4, mouthOpen: 0.2, eyeOpen: 1.0, wink: true },
-    concerned: { eyeSmile: 0, browY: -0.3, mouthForm: -0.2, mouthOpen: 0.1, eyeOpen: 1.0 },
-    apologetic: { eyeSmile: 0.2, browY: -0.4, mouthForm: 0.1, mouthOpen: 0.1, eyeOpen: 0.9, headDown: true }
+// Zoom state
+let zoomState = {
+    enabled: false,
+    currentScale: 1.0,
+    minScale: 0.3,
+    maxScale: 3.0,
+    zoomStep: 0.08
 };
-
-// Special animation state
-let specialAnimState = {
-    isPlaying: false,
-    type: null,
-    timer: 0,
-    duration: 1.2
-};
-
-// ============================================
-// Capability Detection System
-// ============================================
-
-let capabilities = {
-    // Standard Expressions
-    canBlink: false,
-    canBreath: false,
-    canSwayHead: false,
-    canTiltHead: false,
-    canMouthToggle: false, // Open/Close only
-    canMouthShape: false,  // Form/A-E-I-O-U
-    canSmile: false,
-
-    // Body Movement
-    canMoveBodyX: false,
-    canMoveBodyY: false,
-    canMoveBodyZ: false,
-
-    // Extended Capabilities (Hands/Arms)
-    canMoveArmL: false,
-    canMoveArmR: false,
-    canMoveHandL: false,
-    canMoveHandR: false,
-    canShrug: false,
-
-    // Emotions/Extras
-    canBlush: false,
-    canTear: false,
-
-    // Special
-    hasPhysics: false,
-
-    // Full parameter set for reference
-    params: new Set()
-};
-
-const EXTENDED_PARAMS = {
-    // Arms
-    ARM_L: ['ParamArmL', 'ParamArmLA', 'ParamArmLZ'],
-    ARM_R: ['ParamArmR', 'ParamArmRA', 'ParamArmRZ'],
-
-    // Hands
-    HAND_L: ['ParamHandL', 'ParamHandLA', 'ParamWristL'],
-    HAND_R: ['ParamHandR', 'ParamHandRA', 'ParamWristR'],
-
-    // Shoulders
-    SHOULDER: ['ParamShoulder', 'ParamShoulderL', 'ParamShoulderR'],
-
-    // Cheeks
-    CHEEK: ['ParamCheek', 'ParamBlush', 'ParamCheekBlush'],
-
-    // Tears
-    TEAR: ['ParamTear', 'ParamTearL', 'ParamTearR']
-};
-
-function detectCapabilities(model) {
-    // Reset capabilities
-    capabilities = {
-        canBlink: false, canBreath: false, canSwayHead: false,
-        canTiltHead: false, canMouthToggle: false, canMouthShape: false,
-        canSmile: false, canMoveBodyX: false, canMoveBodyY: false,
-        canMoveBodyZ: false, canMoveArmL: false, canMoveArmR: false,
-        canMoveHandL: false, canMoveHandR: false, canShrug: false,
-        canBlush: false, canTear: false, hasPhysics: false,
-        params: new Set()
-    };
-
-    if (!model?.internalModel?.coreModel) return;
-
-    // Discover all parameters first
-    discoverParameters(); // Populates availableParams global
-    capabilities.params = new Set(availableParams);
-
-    // Standard Checks
-    capabilities.canBlink = hasParameter(PARAM_IDS.EYE_L_OPEN) || hasParameter(PARAM_IDS.EYE_R_OPEN);
-    capabilities.canBreath = hasParameter(PARAM_IDS.BREATH);
-    capabilities.canSwayHead = hasParameter(PARAM_IDS.ANGLE_Z);
-    capabilities.canTiltHead = hasParameter(PARAM_IDS.ANGLE_Z) && hasParameter(PARAM_IDS.ANGLE_X);
-    capabilities.canMouthToggle = hasParameter(PARAM_IDS.MOUTH_OPEN_Y);
-    capabilities.canMouthShape = hasParameter(PARAM_IDS.MOUTH_FORM);
-    capabilities.canSmile = hasParameter(PARAM_IDS.EYE_L_SMILE) || hasParameter(PARAM_IDS.EYE_R_SMILE);
-
-    capabilities.canMoveBodyX = hasParameter(PARAM_IDS.BODY_ANGLE_X);
-    capabilities.canMoveBodyY = hasParameter(PARAM_IDS.BODY_ANGLE_Y);
-    capabilities.canMoveBodyZ = hasParameter(PARAM_IDS.BODY_ANGLE_Z);
-
-    // Extended Checks
-    capabilities.canMoveArmL = EXTENDED_PARAMS.ARM_L.some(p => hasAnyParameter(p));
-    capabilities.canMoveArmR = EXTENDED_PARAMS.ARM_R.some(p => hasAnyParameter(p));
-    capabilities.canMoveHandL = EXTENDED_PARAMS.HAND_L.some(p => hasAnyParameter(p));
-    capabilities.canMoveHandR = EXTENDED_PARAMS.HAND_R.some(p => hasAnyParameter(p));
-    capabilities.canShrug = EXTENDED_PARAMS.SHOULDER.some(p => hasAnyParameter(p));
-    capabilities.canBlush = EXTENDED_PARAMS.CHEEK.some(p => hasAnyParameter(p));
-    capabilities.canTear = EXTENDED_PARAMS.TEAR.some(p => hasAnyParameter(p));
-
-    // Physics Check
-    capabilities.hasPhysics = !!model.internalModel.physics;
-
-    capabilities.hasPhysics = !!model.internalModel.physics;
-
-    console.log('[Avatar] Capability Profile Rebuilt:', capabilities);
-
-    // Report to main process
-    if (window.avatarAPI?.sendCapabilities) {
-        window.avatarAPI.sendCapabilities(capabilities);
-    }
-}
-
-// Helper to check partial matches or exact matches for extended params
-function hasAnyParameter(pattern) {
-    for (const param of capabilities.params) {
-        if (param === pattern || param.includes(pattern)) return true;
-    }
-    return false;
-}
-function randomBlinkInterval() {
-    return TIMING.BLINK_INTERVAL_MIN +
-        Math.random() * (TIMING.BLINK_INTERVAL_MAX - TIMING.BLINK_INTERVAL_MIN);
-}
 
 // ============================================
 // Core Engine & Model Management
 // ============================================
+
+const Live2DRendererProxy = {
+    app: null,
+    model: null,
+    setParameter(paramId, targetValue, immediate) {
+        if (!model?.internalModel?.coreModel) return;
+        try {
+            const coreModel = model.internalModel.coreModel;
+            // Immediate set bypassing our legacy interpolator
+            if (coreModel.setParameterValueById) {
+                coreModel.setParameterValueById(paramId, targetValue);
+            }
+        } catch (e) { }
+    }
+};
 
 async function init() {
     if (isInitialized) return;
@@ -302,8 +155,11 @@ async function init() {
         });
         container.appendChild(app.view);
 
-        // Add ticker
-        app.ticker.add(onTick);
+        Live2DRendererProxy.app = app;
+        avatarController = new AvatarController(Live2DRendererProxy);
+
+        // Add core interactive ticker (mouse/drags)
+        app.ticker.add(onCoreTick);
 
         // Setup listener for model changing
         if (window.avatarAPI?.onLoadModel) {
@@ -325,8 +181,46 @@ async function init() {
     isInitialized = true;
 }
 
+function initUI() {
+    const modeToggle = document.getElementById('mode-toggle');
+    const zoomToggle = document.getElementById('zoom-toggle');
+    const resetBtn = document.getElementById('reset-btn');
+    if (modeToggle) {
+        modeToggle.textContent = 'Drag Mode: OFF';
+        modeToggle.addEventListener('click', () => {
+            dragState.enabled = !dragState.enabled;
+            modeToggle.textContent = `Drag Mode: ${dragState.enabled ? 'ON' : 'OFF'}`;
+            document.getElementById('avatar-container').className = dragState.enabled ? 'drag-mode' : '';
+        });
+    }
+    if (zoomToggle) {
+        zoomToggle.textContent = 'Zoom Mode: OFF';
+        zoomToggle.addEventListener('click', () => {
+            zoomState.enabled = !zoomState.enabled;
+            zoomToggle.textContent = `Zoom Mode: ${zoomState.enabled ? 'ON' : 'OFF'}`;
+            console.log('[Avatar] Zoom mode:', zoomState.enabled ? 'ON' : 'OFF');
+        });
+    }
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            if (model && app) {
+                model.x = app.renderer.width / 2;
+                model.y = app.renderer.height;
+                // Also reset zoom
+                zoomState.currentScale = 1.0;
+                const container = document.getElementById('avatar-container');
+                fitModelToView(container);
+            }
+        });
+    }
+}
+
 async function loadModel(modelPath) {
     if (!app) return;
+
+    if (modelPath && !modelPath.startsWith('file://') && !modelPath.startsWith('http')) {
+        modelPath = 'file:///' + modelPath.replace(/\\/g, '/');
+    }
 
     console.log('[Avatar] Loading model...', modelPath);
 
@@ -335,7 +229,6 @@ async function loadModel(modelPath) {
         app.stage.removeChild(model);
         model.destroy({ children: true, texture: true, baseTexture: true });
         model = null;
-        availableParams.clear();
     }
 
     if (!modelPath) {
@@ -354,11 +247,14 @@ async function loadModel(modelPath) {
 
         if (!model) throw new Error('Model creation failed');
 
+        // Assign to proxy for AvatarController
+        Live2DRendererProxy.model = model;
+
         // Success
         console.log('[Avatar] Model loaded.');
 
-        // Detect Capabilities
-        detectCapabilities(model);
+        // Detect Capabilities using the new structured system
+        await avatarController.onModelLoaded(model, modelPath);
 
         // Position
         initialModelWidth = model.internalModel.width;
@@ -367,9 +263,13 @@ async function loadModel(modelPath) {
 
         app.stage.addChild(model);
 
+        // Tell main window
+        if (window.avatarAPI?.sendCapabilities) {
+            const caps = avatarController.registry.getCapabilities();
+            window.avatarAPI.sendCapabilities(caps);
+        }
     } catch (e) {
         console.error('[Avatar] Failed to load model:', e);
-        // Fallback or Error UI could go here
     }
 }
 
@@ -395,91 +295,6 @@ async function getModelPath() {
     return path;
 }
 
-function discoverParameters() {
-    availableParams.clear();
-
-    if (!model?.internalModel?.coreModel) {
-        console.warn('[Avatar] Cannot discover parameters - no coreModel');
-        return;
-    }
-
-    try {
-        const coreModel = model.internalModel.coreModel;
-
-        // Cubism 4 uses _parameterIds array
-        if (coreModel._parameterIds) {
-            coreModel._parameterIds.forEach(id => availableParams.add(id));
-            console.log('[Avatar] Discovered', availableParams.size, 'parameters via _parameterIds');
-            return;
-        }
-
-        // Fallback: try to get parameter count and iterate
-        const paramCount = coreModel.getParameterCount?.() || 0;
-        if (paramCount > 0 && coreModel.getParameterId) {
-            for (let i = 0; i < paramCount; i++) {
-                const paramId = coreModel.getParameterId(i);
-                availableParams.add(paramId);
-            }
-            console.log('[Avatar] Discovered', availableParams.size, 'parameters via getParameterId');
-            return;
-        }
-
-        // Another fallback: use model's settings
-        if (model.internalModel?.settings?.parameterIds) {
-            model.internalModel.settings.parameterIds.forEach(id => availableParams.add(id));
-            console.log('[Avatar] Discovered', availableParams.size, 'parameters via settings');
-            return;
-        }
-
-        // Last resort: assume common parameters exist
-        console.log('[Avatar] Using default parameter set');
-        Object.values(PARAM_IDS).forEach(id => availableParams.add(id));
-
-    } catch (e) {
-        console.warn('[Avatar] Parameter discovery failed:', e.message);
-        // Use default parameters as fallback
-        Object.values(PARAM_IDS).forEach(id => availableParams.add(id));
-    }
-}
-
-function hasParameter(paramId) {
-    // With fallback, assume all common params might exist
-    return availableParams.has(paramId) || availableParams.size === 0;
-}
-
-function setParameter(paramId, value, immediate = false) {
-    if (immediate) {
-        currentValues[paramId] = value;
-        applyParameter(paramId, value);
-    } else {
-        targetValues[paramId] = value;
-    }
-}
-
-function applyParameter(paramId, value) {
-    if (!model?.internalModel?.coreModel) return;
-
-    try {
-        const coreModel = model.internalModel.coreModel;
-
-        // Cubism 4 API
-        if (coreModel.setParameterValueById) {
-            coreModel.setParameterValueById(paramId, value);
-            return;
-        }
-
-        // Alternative: find parameter index and set by index
-        if (coreModel._parameterIds && coreModel.setParameterValueByIndex) {
-            const index = coreModel._parameterIds.indexOf(paramId);
-            if (index >= 0) {
-                coreModel.setParameterValueByIndex(index, value);
-            }
-        }
-    } catch (e) {
-        // Silently ignore - parameter might not exist
-    }
-}
-
 function fitModelToView(container) {
     if (!model || !app) return;
 
@@ -490,190 +305,54 @@ function fitModelToView(container) {
     const width = initialModelWidth || model.internalModel.width;
     const height = initialModelHeight || model.internalModel.height;
 
-    // Calculate scale to fit container
-    const scale = Math.min(
+    // Calculate scale to fit container, then apply zoom multiplier
+    const baseScale = Math.min(
         containerWidth / width,
         containerHeight / height
     ) * 0.9;
+    const finalScale = baseScale * zoomState.currentScale;
 
-    model.scale.set(scale);
-    console.log(`[Avatar] Resize: Container ${containerWidth}x${containerHeight}, Scale ${scale}`);
+    model.scale.set(finalScale);
     model.x = containerWidth / 2;
-    model.y = containerHeight;
+
+    // Face-centered zoom: at zoom=1.0, model bottom is at container bottom.
+    // As zoom increases, shift the model DOWN so the face (at ~25% from top
+    // of model) stays centered in the viewport.
+    if (zoomState.currentScale <= 1.0) {
+        model.y = containerHeight;
+    } else {
+        // The face is roughly at 25% from the top of the model.
+        // At higher zoom, we want the face position to align with the 
+        // center of the container.
+        const scaledHeight = height * finalScale;
+        const faceY = 0.25 * scaledHeight; // Face position from top of scaled model
+        // Model anchor is (0.5, 1), so model.y is the bottom edge position.
+        // The face in screen coords = model.y - scaledHeight + faceY
+        // We want this to equal containerHeight / 2
+        // model.y = containerHeight / 2 + scaledHeight - faceY
+        model.y = containerHeight / 2 + scaledHeight - faceY;
+    }
     model.anchor.set(0.5, 1);
 }
 
-function onTick(delta) {
+function onCoreTick(delta) {
     if (!model) return;
 
     const dt = delta / 60;
-
-    // Smooth interpolation
-    interpolateValues(dt);
-
-    // Interactive features
     updateCursorTracking(dt);
-    updateBoop(dt);
-    updateSpecialAnim(dt);
-
-    // Auto behaviors
-    if (behaviors.blinkEnabled) updateBlink(dt);
-    if (behaviors.breathingEnabled) updateBreathing(dt);
-    if (behaviors.headSwayEnabled) updateHeadSway(dt);
-    if (behaviors.mouthEnabled) updateMouthSync(dt);
-}
-
-function interpolateValues(dt) {
-    const speed = 8.0;
-
-    for (const [paramId, target] of Object.entries(targetValues)) {
-        const current = currentValues[paramId] ?? target;
-        const diff = target - current;
-
-        if (Math.abs(diff) < 0.001) {
-            currentValues[paramId] = target;
-        } else {
-            currentValues[paramId] = current + diff * Math.min(1, speed * dt);
-        }
-
-        applyParameter(paramId, currentValues[paramId]);
-    }
-}
-
-function updateBlink(dt) {
-    if (!capabilities.canBlink) return;
-
-    animState.blinkTimer += dt;
-    /* ... rest of logic ... */
-
-    if (animState.isBlinking) {
-        const progress = animState.blinkTimer / TIMING.BLINK_DURATION;
-
-        if (progress >= 1) {
-            animState.isBlinking = false;
-            animState.blinkTimer = 0;
-            animState.nextBlinkTime = randomBlinkInterval();
-            setParameter(PARAM_IDS.EYE_L_OPEN, 1, true);
-            setParameter(PARAM_IDS.EYE_R_OPEN, 1, true);
-        } else {
-            const eyeOpen = progress < 0.5
-                ? 1 - (progress * 2)
-                : (progress - 0.5) * 2;
-            setParameter(PARAM_IDS.EYE_L_OPEN, eyeOpen, true);
-            setParameter(PARAM_IDS.EYE_R_OPEN, eyeOpen, true);
-        }
-    } else if (animState.blinkTimer >= animState.nextBlinkTime) {
-        animState.isBlinking = true;
-        animState.blinkTimer = 0;
-    }
-}
-
-function updateBreathing(dt) {
-    if (!capabilities.canBreath) return;
-
-    animState.breathPhase += dt / TIMING.BREATH_CYCLE * Math.PI * 2;
-    if (animState.breathPhase > Math.PI * 2) animState.breathPhase -= Math.PI * 2;
-
-    const breathValue = (Math.sin(animState.breathPhase) + 1) / 2;
-    setParameter(PARAM_IDS.BREATH, breathValue, true);
-}
-
-function updateHeadSway(dt) {
-    animState.swayPhase += dt / TIMING.IDLE_SWAY_CYCLE * Math.PI * 2;
-    if (animState.swayPhase > Math.PI * 2) animState.swayPhase -= Math.PI * 2;
-
-    const swayValue = Math.sin(animState.swayPhase) * TIMING.IDLE_SWAY_AMPLITUDE;
-
-    // Only apply if capability exists
-    if (capabilities.canSwayHead) {
-        setParameter(PARAM_IDS.ANGLE_Z, swayValue, true);
-    }
-
-    // Extended Sway: Arms/Hands breathing
-    if (capabilities.canMoveArmL) setExtendedParam('ParamArmL', swayValue * 0.1);
-    if (capabilities.canMoveArmR) setExtendedParam('ParamArmR', swayValue * -0.1);
-}
-
-// Helper for fuzzy parameter setting
-function setExtendedParam(baseName, value) {
-    for (const param of capabilities.params) {
-        if (param.includes(baseName)) {
-            setParameter(param, value, true);
-        }
-    }
-}
-
-function updateMouthSync(dt) {
-    if (!capabilities.canMouthToggle) return;
-
-    animState.mouthPhase += dt / TIMING.MOUTH_CYCLE * Math.PI * 2;
-    if (animState.mouthPhase > Math.PI * 2) animState.mouthPhase -= Math.PI * 2;
-
-    const mouthOpen = (Math.sin(animState.mouthPhase) + 1) / 2 * 0.7;
-    setParameter(PARAM_IDS.MOUTH_OPEN_Y, mouthOpen, true);
 }
 
 // State handling
 function setState(state) {
-    if (state === currentState) return;
-
-    console.log('[Avatar] State:', currentState, '→', state);
-    currentState = state;
-
-    const behavior = STATE_BEHAVIORS[state];
-    if (!behavior) return;
-
-    behaviors.blinkEnabled = behavior.blinkEnabled;
-    behaviors.breathingEnabled = behavior.breathingEnabled;
-    behaviors.headSwayEnabled = behavior.headSwayEnabled;
-    behaviors.mouthEnabled = behavior.mouthEnabled;
-
-    if (state === 'THINKING' && behavior.headTilt) {
-        setParameter(PARAM_IDS.ANGLE_X, behavior.headTilt.x);
-        setParameter(PARAM_IDS.ANGLE_Y, behavior.headTilt.y);
-        setParameter(PARAM_IDS.ANGLE_Z, behavior.headTilt.z);
-    } else if (state === 'IDLE') {
-        setParameter(PARAM_IDS.ANGLE_X, 0);
-        setParameter(PARAM_IDS.ANGLE_Y, 0);
-    }
-
-    if (state === 'RESPONDING') {
-        applyToneExpression(currentTone);
-    } else {
-        applyNeutralExpression();
-    }
+    avatarController.handleStateChange(state);
 }
 
 function setTone(tone) {
-    if (!tone || tone === currentTone) return;
-
-    console.log('[Avatar] Tone:', currentTone, '→', tone);
-    currentTone = tone;
-
-    if (currentState === 'RESPONDING') {
-        applyToneExpression(tone);
-    }
+    // Only kept for backwards compatibility if needed, though AvatarController uses handlesComplexIntent
 }
 
 function setTypingRhythm(rhythm) {
-    if (currentState !== 'IDLE') return;
-
-    let normalizedRhythm = 'normal';
-    if (rhythm === 'playful' || rhythm === 'fast') {
-        normalizedRhythm = 'fast';
-    } else if (rhythm === 'gentle' || rhythm === 'slow') {
-        normalizedRhythm = 'slow';
-    }
-
-    console.log('[Avatar] Rhythm:', normalizedRhythm);
-
-    if (normalizedRhythm === 'fast') {
-        setParameter(PARAM_IDS.ANGLE_Z, -5);
-        setParameter(PARAM_IDS.EYE_BALL_Y, 0.2);
-    } else if (normalizedRhythm === 'slow') {
-        setParameter(PARAM_IDS.ANGLE_Z, 0);
-        setParameter(PARAM_IDS.EYE_BALL_Y, 0);
-    }
+    avatarController.handleTypingRhythm(rhythm);
 }
 
 function applyToneExpression(tone) {
@@ -700,8 +379,7 @@ function applyNeutralExpression() {
 // ================================
 
 function updateCursorTracking(dt) {
-    // Don't track cursor during boop or special animations
-    if (!cursorTrackingEnabled || boopState.isBooping || specialAnimState.isPlaying) return;
+    if (!cursorTrackingEnabled) return;
 
     // Normalize cursor position to -1 to 1 range (centered)
     const normX = (cursorPos.x - 0.5) * 2;
@@ -721,13 +399,28 @@ function updateCursorTracking(dt) {
     currentCursorInfluence.headX += (targetCursorInfluence.headX - currentCursorInfluence.headX) * speed * dt;
     currentCursorInfluence.headY += (targetCursorInfluence.headY - currentCursorInfluence.headY) * speed * dt;
 
-    // Apply to eye parameters (only if no expression override)
-    setParameter(PARAM_IDS.EYE_BALL_X, currentCursorInfluence.eyeX, true);
-    setParameter(PARAM_IDS.EYE_BALL_Y, currentCursorInfluence.eyeY, true);
+    const bodyX = currentCursorInfluence.headX * 0.5; // Body moves half as much as head
+    const bodyY = currentCursorInfluence.headY * 0.5;
+    const bodyZ = currentCursorInfluence.headX * 0.2; // Slight tilt based on X looking
 
-    // Apply head tracking (subtle, only when no special anim)
-    setParameter(PARAM_IDS.ANGLE_X, currentCursorInfluence.headX, true);
-    setParameter(PARAM_IDS.ANGLE_Y, currentCursorInfluence.headY, true);
+    // Dispatch to AvatarController so they get blended properly without being overwritten
+    if (avatarController) {
+        avatarController.setCursorInfluence({
+            [PARAM_IDS.EYE_BALL_X]: currentCursorInfluence.eyeX,
+            [PARAM_IDS.EYE_BALL_Y]: currentCursorInfluence.eyeY,
+            [PARAM_IDS.ANGLE_X]: currentCursorInfluence.headX,
+            [PARAM_IDS.ANGLE_Y]: currentCursorInfluence.headY,
+            [PARAM_IDS.ANGLE_Z]: currentCursorInfluence.headX * 0.3,
+            [PARAM_IDS.BODY_ANGLE_X]: bodyX,
+            [PARAM_IDS.BODY_ANGLE_Y]: bodyY,
+            [PARAM_IDS.BODY_ANGLE_Z]: bodyZ
+        });
+    }
+
+    // Force physics update to catch up with immediate manual parameter setting
+    if (model.internalModel && model.internalModel.motionManager && model.internalModel.motionManager.physics) {
+        model.internalModel.motionManager.physics.evaluate(model.internalModel.coreModel, dt);
+    }
 }
 
 function handleMouseDown(e) {
@@ -759,324 +452,59 @@ function handleMouseMove(e) {
 // Boop Interaction
 // ================================
 
-function triggerBoop() {
-    if (boopState.isBooping) return;
-
-    console.log('[Avatar] Boop!');
-    boopState.isBooping = true;
-    boopState.timer = 0;
-    boopState.bouncePhase = 0;
-
-    // Immediate surprised reaction - wide eyes, raised brows, open mouth
-    setParameter(PARAM_IDS.EYE_L_OPEN, 1.3, true);  // Eyes wide open
-    setParameter(PARAM_IDS.EYE_R_OPEN, 1.3, true);
-    setParameter(PARAM_IDS.EYE_L_SMILE, 0, true);   // Not smiling yet
-    setParameter(PARAM_IDS.EYE_R_SMILE, 0, true);
-    setParameter(PARAM_IDS.BROW_L_Y, 0.8, true);    // Raised eyebrows
-    setParameter(PARAM_IDS.BROW_R_Y, 0.8, true);
-    setParameter(PARAM_IDS.MOUTH_OPEN_Y, 0.6, true); // Open mouth (surprised)
-    setParameter(PARAM_IDS.MOUTH_FORM, 0.3, true);   // Slight o-shape
-    setParameter(PARAM_IDS.EYE_BALL_Y, 0.2, true);   // Eyes slightly up
-}
-
-function updateBoop(dt) {
-    if (!boopState.isBooping) return;
-
-    boopState.timer += dt;
-    boopState.bouncePhase += dt * 15; // Fast bounce
-
-    // Bounce effect on body
-    const bounce = Math.sin(boopState.bouncePhase) * Math.exp(-boopState.timer * 5) * 5;
-    setParameter(PARAM_IDS.BODY_ANGLE_Y, bounce, true);
-
-    // Transition to happy expression
-    const progress = boopState.timer / boopState.duration;
-    if (progress > 0.3) {
-        const smileProgress = Math.min(1, (progress - 0.3) / 0.3);
-        setParameter(PARAM_IDS.EYE_L_SMILE, smileProgress * 0.8, true);
-        setParameter(PARAM_IDS.EYE_R_SMILE, smileProgress * 0.8, true);
-        setParameter(PARAM_IDS.MOUTH_FORM, smileProgress * 0.5, true);
-    }
-
-    // End boop
-    if (boopState.timer >= boopState.duration) {
-        boopState.isBooping = false;
-        setParameter(PARAM_IDS.BODY_ANGLE_Y, 0, true);
-        // Return to current state expression
-        if (currentState === 'IDLE') {
-            applyNeutralExpression();
-        }
-    }
-}
-
-function handleClick(e) {
-    // If dragging is enabled, clicking does NOT boop (unless we want it to?)
-    // User requested "either dragging ... or boop"
-    if (dragState.enabled) return;
-
-    triggerBoop();
-}
-
-// ================================
-// UI Handling
-// ================================
-
-function initUI() {
-    const toggleBtn = document.getElementById('mode-toggle');
-    const resetBtn = document.getElementById('reset-btn');
-
-    if (toggleBtn) {
-        updateToggleText(toggleBtn);
-        toggleBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            dragState.enabled = !dragState.enabled;
-            updateToggleText(toggleBtn);
-
-            // Toggle Drag Mode
-            if (dragState.enabled) {
-                document.body.classList.add('drag-mode');
-                document.body.style.cursor = 'default'; // cursor handling by OS
-            } else {
-                document.body.classList.remove('drag-mode');
-                document.body.style.cursor = 'default';
-            }
-        });
-    }
-
-    if (resetBtn) {
-        resetBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (window.avatarAPI?.moveWindow) {
-                // Reset to top-leftish
-                window.avatarAPI.moveWindow({ x: 50, y: 100 });
-            }
-        });
-    }
-}
-
-function updateToggleText(btn) {
-    btn.textContent = dragState.enabled ? '✅ Drag Mode' : '❌ Drag Mode (Interact)';
-    btn.style.color = dragState.enabled ? '#88ff88' : '#cccccc';
-}
-
-// ================================
-// Sentiment-Based Reactions
-// ================================
-
-function applySentiment(sentiment) {
-    const expr = SENTIMENT_EXPRESSIONS[sentiment] || SENTIMENT_EXPRESSIONS.neutral;
-
-    console.log('[Avatar] Sentiment:', sentiment, expr);
-
-    // Apply base expression checks
-    if (capabilities.canSmile) {
-        setParameter(PARAM_IDS.EYE_L_SMILE, expr.eyeSmile, true);
-        setParameter(PARAM_IDS.EYE_R_SMILE, expr.eyeSmile, true);
-    }
-
-    setParameter(PARAM_IDS.BROW_L_Y, expr.browY, true);
-    setParameter(PARAM_IDS.BROW_R_Y, expr.browY, true);
-
-    if (capabilities.canMouthShape) {
-        setParameter(PARAM_IDS.MOUTH_FORM, expr.mouthForm, true);
-    }
-
-    if (expr.mouthOpen !== undefined && capabilities.canMouthToggle) {
-        setParameter(PARAM_IDS.MOUTH_OPEN_Y, expr.mouthOpen, true);
-    }
-
-    if (expr.eyeOpen !== undefined && capabilities.canBlink) {
-        // Only override eye open if we are not forced blinking
-        setParameter(PARAM_IDS.EYE_L_OPEN, expr.eyeOpen, true);
-        setParameter(PARAM_IDS.EYE_R_OPEN, expr.eyeOpen, true);
-    }
-
-    // Extended Reactions
-    if (expr.blush && capabilities.canBlush) {
-        setExtendedParam('ParamCheek', 1.0);
-        setExtendedParam('ParamBlush', 1.0);
-    } else {
-        // Reset blush if not needed
-        if (capabilities.canBlush) {
-            setExtendedParam('ParamCheek', 0);
-            setExtendedParam('ParamBlush', 0);
-        }
-    }
-
-    // Handle special animations
-    if (expr.wave || expr.bounce || expr.wink || expr.lookUp || expr.lookAway || expr.headTilt || expr.headUp || expr.headDown) {
-        triggerSpecialAnim(sentiment, expr);
-    } else {
-        // For non-animated expressions, set a temporary hold
-        specialAnimState.isPlaying = true;
-        specialAnimState.type = sentiment;
-        specialAnimState.timer = 0;
-        specialAnimState.duration = 3.0; // Hold expression for 3 seconds
-    }
-}
-
-function triggerSpecialAnim(type, expr) {
-    specialAnimState.isPlaying = true;
-    specialAnimState.type = type;
-    specialAnimState.timer = 0;
-    specialAnimState.duration = 2.5;  // Longer duration for more visible animations
-
-    console.log('[Avatar] Special anim:', type);
-
-    // Immediate special effects
-    if (expr.headTilt) {
-        setParameter(PARAM_IDS.ANGLE_Z, expr.headTilt, true);
-    }
-    if (expr.headUp) {
-        setParameter(PARAM_IDS.ANGLE_Y, 12, true);
-    }
-    if (expr.headDown) {
-        setParameter(PARAM_IDS.ANGLE_Y, -10, true);
-    }
-    if (expr.lookUp) {
-        setParameter(PARAM_IDS.EYE_BALL_Y, 0.6, true);
-    }
-    if (expr.lookAway) {
-        setParameter(PARAM_IDS.EYE_BALL_X, 0.8, true);
-        setParameter(PARAM_IDS.ANGLE_X, -18, true);
-    }
-    if (expr.wink) {
-        // Wink left eye
-        setParameter(PARAM_IDS.EYE_L_OPEN, 0.1, true);
-    }
-}
-
-function updateSpecialAnim(dt) {
-    if (!specialAnimState.isPlaying) return;
-
-    specialAnimState.timer += dt;
-    const progress = specialAnimState.timer / specialAnimState.duration;
-    const expr = SENTIMENT_EXPRESSIONS[specialAnimState.type];
-
-    // Handle non-animated expressions (just holding)
-    if (!expr) {
-        if (specialAnimState.timer >= specialAnimState.duration) {
-            specialAnimState.isPlaying = false;
-            specialAnimState.type = null;
-            // Return to neutral
-            applyNeutralExpression();
-        }
-        return;
-    }
-
-    // Wave animation (body sway + arm wave)
-    if (expr.wave) {
-        const wavePhase = progress * Math.PI * 6;
-        const waveAmount = Math.sin(wavePhase) * Math.exp(-progress * 1.5) * 12;
-
-        // Body sway
-        if (capabilities.canMoveBodyX) setParameter(PARAM_IDS.BODY_ANGLE_X, waveAmount, true);
-
-        // Head nod
-        const nodAmount = Math.sin(progress * Math.PI * 4) * Math.exp(-progress * 2) * 8;
-        setParameter(PARAM_IDS.ANGLE_Y, nodAmount, true);
-
-        // Arm Wave (Right Arm)
-        if (capabilities.canMoveArmR) {
-            const armWave = Math.sin(wavePhase) * 1.5; // -1 to 1 range approx
-            // Try specific arm params if available
-            setExtendedParam('ParamArmR', armWave);
-            setExtendedParam('ParamArmRZ', armWave * 30); // Rotate Z usually lifts arm
-            setExtendedParam('ParamHandR', Math.sin(wavePhase * 2)); // Hand flutter
-        }
-    }
-
-    // Bounce animation
-    if (expr.bounce) {
-        const bouncePhase = progress * Math.PI * 8;
-        const bounceAmount = Math.abs(Math.sin(bouncePhase)) * Math.exp(-progress * 2) * 8;
-        setParameter(PARAM_IDS.BODY_ANGLE_Y, bounceAmount, true);
-
-        // Arms bounce too
-        if (capabilities.canMoveArmL) setExtendedParam('ParamArmL', bounceAmount * 0.1);
-        if (capabilities.canMoveArmR) setExtendedParam('ParamArmR', bounceAmount * 0.1);
-    }
-
-    // Shrug (Confused)
-    if (specialAnimState.type === 'confused' && capabilities.canShrug) {
-        // Hold shoulders up
-        const shrugAmount = Math.sin(progress * Math.PI) * 1.0; // Arch shape 0->1->0
-        setExtendedParam('ParamShoulder', shrugAmount);
-    }
-
-    // Wink - restore eye after a bit
-    if (expr.wink && progress > 0.3) {
-        setParameter(PARAM_IDS.EYE_L_OPEN, 1.0, true);
-    }
-
-    // End special animation
-    if (specialAnimState.timer >= specialAnimState.duration) {
-        specialAnimState.isPlaying = false;
-        specialAnimState.type = null;
-
-        // Reset special positions
-        setParameter(PARAM_IDS.BODY_ANGLE_X, 0);
-        setParameter(PARAM_IDS.BODY_ANGLE_Y, 0);
-        setParameter(PARAM_IDS.ANGLE_Z, 0);
-
-        // Reset extended params
-        if (capabilities.canMoveArmR) {
-            setExtendedParam('ParamArmR', 0);
-            setExtendedParam('ParamArmRZ', 0);
-        }
-        if (capabilities.canShrug) setExtendedParam('ParamShoulder', 0);
-    }
-}
-
 // Setup IPC listeners
 if (window.avatarAPI) {
-    window.avatarAPI.onStateChange(setState);
-    window.avatarAPI.onToneHint(setTone);
-    window.avatarAPI.onTypingRhythm(setTypingRhythm);
-    window.avatarAPI.onResponseTiming((timing) => {
-        if (timing?.isComplete) {
-            behaviors.mouthEnabled = false;
-            setParameter(PARAM_IDS.MOUTH_OPEN_Y, 0);
-        }
+    window.avatarAPI.onStateChange((state) => {
+        avatarController.handleStateChange(state);
+    });
+    window.avatarAPI.onTypingRhythm((rhythm) => {
+        avatarController.handleTypingRhythm(rhythm);
     });
 
-    // Sentiment-based reactions
-    if (window.avatarAPI.onSentiment) {
-        window.avatarAPI.onSentiment(applySentiment);
-    }
-
-    // Mouth sync
-    if (window.avatarAPI.onMouthAmplitude) {
-        window.avatarAPI.onMouthAmplitude((amp) => {
-            // Need a way to access renderer instance or update logic directly
-            // Since this runs in browser context, we can add a global handler or update params directly
-            // For now, let's update a global mouth amplitude target
-            setExternalMouth(amp);
-        });
-    }
-
-    if (window.avatarAPI.onExternalMouthControl) {
-        window.avatarAPI.onExternalMouthControl((active) => {
-            if (active) {
-                behaviors.mouthEnabled = false; // Disable internal loop
+    // New complex intent
+    if (window.avatarAPI.onComplexIntent) {
+        window.avatarAPI.onComplexIntent((intent) => {
+            console.log('[AvatarWindow] ==========================================');
+            console.log('[AvatarWindow] RECEIVED COMPLEX INTENT:', JSON.stringify(intent));
+            console.log('[AvatarWindow] avatarController exists:', !!avatarController);
+            console.log('[AvatarWindow] avatarController.isEnabled:', avatarController?.isEnabled);
+            console.log('[AvatarWindow] model exists:', !!model);
+            console.log('[AvatarWindow] ==========================================');
+            if (avatarController) {
+                avatarController.handleComplexIntent(intent);
             } else {
-                // Restore based on current state
-                const behavior = STATE_BEHAVIORS[currentState];
-                behaviors.mouthEnabled = behavior ? behavior.mouthEnabled : false;
-                setParameter(PARAM_IDS.MOUTH_OPEN_Y, 0, true);
+                console.error('[AvatarWindow] avatarController is NULL - intent dropped!');
             }
         });
+        console.log('[AvatarWindow] onComplexIntent listener registered');
+    } else {
+        console.warn('[AvatarWindow] window.avatarAPI.onComplexIntent is NOT available');
+    }
+
+    // New mouth amplitude
+    if (window.avatarAPI.onMouthAmplitude) {
+        window.avatarAPI.onMouthAmplitude((amp) => {
+            avatarController.handleMouthAmplitude(amp);
+        });
     }
 }
 
-function setExternalMouth(amplitude) {
-    const scaled = Math.min(1, Math.max(0, amplitude)) * 0.8;
-    setParameter(PARAM_IDS.MOUTH_OPEN_Y, scaled, true);
-}
-
-// Mouse event listeners for cursor tracking and boop
+// Mouse event listeners for cursor tracking
 document.addEventListener('mousemove', handleMouseMove);
-document.addEventListener('click', handleClick);
+
+// Scroll/wheel zoom handler
+document.addEventListener('wheel', (e) => {
+    if (!zoomState.enabled || !model) return;
+    e.preventDefault();
+
+    // Determine zoom direction (scroll up = zoom in, scroll down = zoom out)
+    const delta = e.deltaY > 0 ? -zoomState.zoomStep : zoomState.zoomStep;
+    zoomState.currentScale = Math.max(zoomState.minScale, Math.min(zoomState.maxScale, zoomState.currentScale + delta));
+
+    // Apply via fitModelToView which respects zoom scale
+    const container = document.getElementById('avatar-container');
+    if (container) fitModelToView(container);
+}, { passive: false });
 
 // Resize handling
 window.addEventListener('resize', () => {

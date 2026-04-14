@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld('avatarAPI', {
     onSentiment: (callback) => {
         ipcRenderer.on('avatar:sentiment', (_, data) => callback(data));
     },
+    onComplexIntent: (callback) => {
+        ipcRenderer.on('avatar:intent', (_, data) => callback(data));
+    },
     onMouthAmplitude: (callback) => {
         ipcRenderer.on('avatar:mouth-amplitude', (_, data) => callback(data));
     },
@@ -28,6 +31,7 @@ contextBridge.exposeInMainWorld('avatarAPI', {
     getModelPath: () => ipcRenderer.invoke('get-avatar-model-path'),
     getAvailableModels: () => ipcRenderer.invoke('get-available-models'),
     changeModel: (path) => ipcRenderer.invoke('change-avatar-model', path),
+    getModelExpressions: (path) => ipcRenderer.invoke('get-model-expressions', path),
     onLoadModel: (callback) => {
         ipcRenderer.on('avatar-load-model', (_, path) => callback(path));
     },

@@ -68,10 +68,18 @@ export const PARAM_IDS = Object.freeze({
     BROW_R_Y: 'ParamBrowRY',
     BROW_L_ANGLE: 'ParamBrowLAngle',
     BROW_R_ANGLE: 'ParamBrowRAngle',
+    BROW_L_FORM: 'ParamBrowLForm',
+    BROW_R_FORM: 'ParamBrowRForm',
 
     // Other
     BREATH: 'ParamBreath',
-    CHEEK: 'ParamCheek'
+    CHEEK: 'ParamCheek',
+
+    // Model-specific (common in VTuber models)
+    GLARE: 'Param49',           // 瞪眼 - glaring/wide stare eyes
+    PUFFED_CHEEKS: 'Param46',   // 鼓脸 - puffed/pouty cheeks
+    CROOKED_MOUTH: 'Param48',   // 歪嘴 - crooked/asymmetric mouth
+    JAW: 'Param47'              // 下颚 - jaw movement
 });
 
 // State behavior presets

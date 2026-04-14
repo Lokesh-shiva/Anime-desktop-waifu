@@ -16,50 +16,90 @@ export const BrainRouter = {
     /**
      * Generate a response using the appropriate model
      * @param {string} prompt - User input
-     * @returns {Promise<string>} - LLM response
+     * @returns {Promise<Object>} - Parsed LLM response JSON { text, emotion, actionHints }
      */
     async generate(prompt, options = {}) {
         const mode = getModelMode();
         console.log(`[Brain] Mode: ${mode}`);
 
+        let rawResponse = '';
+
         // If preferLocal requested AND we are not forced to Cloud Only
         // Use local directly
         if (options.preferLocal && mode !== MODEL_MODE.CLOUD_ONLY) {
             console.log('[Brain] Preferring local for background task');
-            return this._generateLocal(prompt, options);
+            rawResponse = await this._generateLocal(prompt, options);
+        } else {
+            switch (mode) {
+                case MODEL_MODE.LOCAL_ONLY:
+                    rawResponse = await this._generateLocal(prompt, options);
+                    break;
+                case MODEL_MODE.CLOUD_PREFERRED:
+                    rawResponse = await this._generateCloudWithFallback(prompt, options);
+                    break;
+                case MODEL_MODE.CLOUD_ONLY:
+                    rawResponse = await this._generateCloud(prompt, options);
+                    break;
+                default:
+                    // Safety fallback to local
+                    console.warn('[Brain] Unknown mode, defaulting to local');
+                    rawResponse = await this._generateLocal(prompt, options);
+            }
         }
 
-        switch (mode) {
-            case MODEL_MODE.LOCAL_ONLY:
-                return this._generateLocal(prompt, options);
-
-            case MODEL_MODE.CLOUD_PREFERRED:
-                return this._generateCloudWithFallback(prompt, options);
-
-            case MODEL_MODE.CLOUD_ONLY:
-                return this._generateCloud(prompt, options);
-
-            default:
-                // Safety fallback to local
-                console.warn('[Brain] Unknown mode, defaulting to local');
-                return this._generateLocal(prompt, options);
-        }
+        return this._parseLLMResponse(rawResponse);
     },
 
     /**
-     * Generate using local Ollama only
-     * @param {string} prompt
-     * @returns {Promise<string>}
+     * Parse raw string from LLM into structured JSON
      */
-    async _generateLocal(prompt, options) {
+    _parseLLMResponse(rawText) {
+        let parsed = null;
         try {
-            const response = await OllamaAdapter.generate(prompt, options);
-            console.log('[Brain] Local response received');
-            return response;
-        } catch (error) {
-            console.error('[Brain] Local error:', error.message);
-            throw this._sanitizeError(error);
+            // attempt pure JSON parse
+            parsed = JSON.parse(rawText);
+        } catch (e) {
+            // Try stripping markdown blocks
+            try {
+                const stripped = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+                parsed = JSON.parse(stripped);
+            } catch (e2) {
+                // Fallback to extraction
+                console.warn('[Brain] Failed to parse JSON, falling back to text inference.', rawText);
+                parsed = {
+                    text: rawText,
+                    emotion: this._inferEmotionFromText(rawText),
+                    actionHints: {}
+                };
+            }
         }
+
+        // Sanitize return
+        return {
+            text: parsed.text || '',
+            emotion: parsed.emotion || { label: 'neutral', intensity: 0, sentimentScore: 0 },
+            actionHints: parsed.actionHints || {}
+        };
+    },
+
+    _inferEmotionFromText(text) {
+        const lowerText = text.toLowerCase();
+        let label = 'neutral';
+        let intensity = 0.5;
+
+        // Extremely naive fallback inference
+        if (lowerText.includes('haha') || lowerText.includes('happy') || lowerText.includes('!')) {
+            label = 'happy';
+            intensity = 0.8;
+        } else if (lowerText.includes('sad') || lowerText.includes('sorry')) {
+            label = 'sad';
+            intensity = 0.6;
+        } else if (lowerText.includes('angry') || lowerText.includes('mad')) {
+            label = 'anger';
+            intensity = 0.7;
+        }
+
+        return { label, intensity, sentimentScore: 0 };
     },
 
     /**
