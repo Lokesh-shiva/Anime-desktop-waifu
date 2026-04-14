@@ -82,9 +82,14 @@ export class EmotionMapper {
             'anger': ['anger', 'angry', 'mad'],
             'playful': ['tongueout', 'tease', 'wink', 'fun'],
             'surprised': ['surprise', 'shock', 'wow'],
-            'embarrassed': ['blush', 'shy', 'embarrassed'],
+            'embarrassed': ['blush', 'shy', 'embarrassed', 'sad'],
             'curious': ['think', 'curious', 'wonder'],
-            'neutral': ['neutral', 'normal', 'default']
+            'neutral': ['neutral', 'normal', 'default'],
+            // Shy/adorable personality mappings
+            'shy': ['sad', 'shy', 'neutral'],
+            'grateful': ['happy', 'joy', 'smile'],
+            'hesitant': ['sad', 'neutral', 'shy'],
+            'melancholic': ['sad', 'sorrow', 'neutral']
         };
 
         const targets = map[label] || [];
@@ -355,6 +360,77 @@ export class EmotionMapper {
                 [PARAM_IDS.EYE_R_OPEN]: 1.0,
                 [PARAM_IDS.MOUTH_OPEN_Y]: 0,
                 [PARAM_IDS.CHEEK]: 0
+            },
+            // Shy/Adorable Personality - VT_ELF Optimized
+            'shy': {
+                [PARAM_IDS.EYE_L_OPEN]: 0.4,
+                [PARAM_IDS.EYE_R_OPEN]: 0.4,
+                [PARAM_IDS.CHEEK]: 0.7,
+                [PARAM_IDS.ANGLE_Y]: -10,
+                [PARAM_IDS.BROW_L_Y]: -0.2,
+                [PARAM_IDS.BROW_R_Y]: -0.2,
+                // VT_ELF-specific: Drooped ears
+                'Param11': -0.3,
+                [PARAM_IDS.MOUTH_FORM]: -0.1
+            },
+            'embarrassed': {
+                [PARAM_IDS.EYE_L_OPEN]: 0.3,
+                [PARAM_IDS.EYE_R_OPEN]: 0.3,
+                [PARAM_IDS.CHEEK]: 1.0,
+                [PARAM_IDS.MOUTH_FORM]: -0.3,
+                [PARAM_IDS.ANGLE_Y]: -10,
+                [PARAM_IDS.BROW_L_Y]: -0.1,
+                [PARAM_IDS.BROW_R_Y]: -0.1,
+                // VT_ELF-specific: Nervousness marker + ears back + skirt puff
+                'ParamSweatVis': 1.0,
+                'Param11': -0.4,
+                'ParamSkirtexpend': 0.3
+            },
+            'grateful': {
+                [PARAM_IDS.EYE_L_OPEN]: 0.7,
+                [PARAM_IDS.EYE_R_OPEN]: 0.7,
+                [PARAM_IDS.EYE_L_SMILE]: 0.6,
+                [PARAM_IDS.EYE_R_SMILE]: 0.6,
+                [PARAM_IDS.CHEEK]: 0.8,
+                [PARAM_IDS.MOUTH_FORM]: 0.3,
+                // VT_ELF-specific: Perked ears + gentle ear wave
+                'Param11': 0.2,
+                'Param20': 0.3
+            },
+            'hesitant': {
+                [PARAM_IDS.EYE_L_OPEN]: 0.5,
+                [PARAM_IDS.EYE_R_OPEN]: 0.5,
+                [PARAM_IDS.BROW_L_Y]: -0.3,
+                [PARAM_IDS.BROW_R_Y]: -0.3,
+                [PARAM_IDS.MOUTH_FORM]: -0.2,
+                [PARAM_IDS.CHEEK]: 0.3,
+                // VT_ELF-specific: Slightly drooped ears + mild nervousness
+                'Param11': -0.2,
+                'ParamSweatVis': 0.6
+            },
+            'melancholic': {
+                [PARAM_IDS.EYE_L_OPEN]: 0.4,
+                [PARAM_IDS.EYE_R_OPEN]: 0.4,
+                [PARAM_IDS.BROW_L_Y]: -0.6,
+                [PARAM_IDS.BROW_R_Y]: -0.6,
+                [PARAM_IDS.MOUTH_FORM]: -0.4,
+                [PARAM_IDS.ANGLE_Y]: -5,
+                [PARAM_IDS.CHEEK]: 0.2,
+                // VT_ELF-specific: Drooped ears + uncertainty
+                'Param11': -0.5,
+                'ParamSweatVis': 0.3
+            },
+            'playful': {
+                [PARAM_IDS.EYE_L_SMILE]: 0.8,
+                [PARAM_IDS.EYE_R_SMILE]: 0.8,
+                [PARAM_IDS.MOUTH_FORM]: 0.6,
+                [PARAM_IDS.CHEEK]: 0.6,
+                [PARAM_IDS.BROW_L_Y]: 0.2,
+                // VT_ELF-specific: Tongue out + perked ears + playful skirt puff
+                'Paramtoungevis': 1.0,
+                'ParamBero': 0.4,
+                'Param11': 0.3,
+                'ParamSkirtexpend': 0.4
             }
         };
 
