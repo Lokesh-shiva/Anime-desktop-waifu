@@ -112,6 +112,22 @@ export const BrainRouter = {
     },
 
     /**
+     * Generate using local Ollama only
+     * @param {string} prompt
+     * @returns {Promise<string>}
+     */
+    async _generateLocal(prompt, options) {
+        try {
+            const response = await OllamaAdapter.generate(prompt, options);
+            console.log('[Brain] Local response received');
+            return response;
+        } catch (error) {
+            console.error('[Brain] Local error:', error.message);
+            throw this._sanitizeError(error);
+        }
+    },
+
+    /**
      * Generate using cloud only (no fallback)
      * @param {string} prompt
      * @returns {Promise<string>}
