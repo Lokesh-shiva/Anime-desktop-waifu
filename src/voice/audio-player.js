@@ -12,7 +12,7 @@ export class AudioPlayer {
         this.animationFrameId = null;
 
         // Playback rate: 1.0 = normal, 0.85 = ~15% slower, 0.75 = noticeably soft/intimate
-        this.playbackRate = 0.88;
+        this.playbackRate = 0.85;
 
         // For amplitude analysis
         this.audioContext = null;
