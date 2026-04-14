@@ -47,12 +47,13 @@ export async function synthesize(text, { apiKey, voiceId } = {}) {
     const body = {
         text,
         model_id: DEFAULT_MODEL_ID,
-        // Soft, expressive delivery tuned for a shy/adorable persona
+        // Intimate, close delivery — low stability = more emotional variance,
+        // high style = expressive not flat, speaker boost = sounds present/near
         voice_settings: {
-            stability: 0.45,
-            similarity_boost: 0.8,
-            style: 0.35,
-            use_speaker_boost: true
+            stability: 0.30,        // Lower = more emotional, breathy, variable
+            similarity_boost: 0.90, // Stay close to voice character
+            style: 0.55,            // Expressive delivery, not monotone
+            use_speaker_boost: true // Cleaner, more "present" sound
         }
     };
 
