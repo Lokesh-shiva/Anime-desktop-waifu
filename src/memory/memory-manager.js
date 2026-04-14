@@ -354,7 +354,8 @@ Analyze and update memory.`;
             // 1. Override system prompt to be the Analyzer
             // 2. Use default model mode (allows cloud if configured)
             const response = await BrainRouter.generate(analysisPrompt, {
-                systemInstruction: MEMORY_ANALYZER_PROMPT
+                systemInstruction: MEMORY_ANALYZER_PROMPT,
+                raw: true  // Skip chat JSON parsing — memory has its own format
             });
 
             // Parse result with robustness for local models

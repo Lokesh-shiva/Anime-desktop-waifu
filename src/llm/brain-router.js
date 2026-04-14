@@ -56,6 +56,10 @@ export const BrainRouter = {
             }
         }
 
+        // raw: true skips chat JSON parsing — used by memory analyzer and other
+        // internal callers that have their own response format
+        if (options.raw) return rawResponse;
+
         return this._parseLLMResponse(rawResponse);
     },
 
