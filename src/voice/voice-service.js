@@ -1,6 +1,13 @@
 import { AudioPlayer } from './audio-player.js';
 import { MouthSync } from './mouth-sync.js';
-import { isVoiceEnabled, getTTSEngine } from '../settings.js';
+import {
+    isVoiceEnabled,
+    getTTSEngine,
+    TTS_ENGINE,
+    getElevenLabsApiKey,
+    getElevenLabsVoiceId
+} from '../settings.js';
+import { synthesize as elevenLabsSynthesize, DEFAULT_VOICE_ID } from './elevenlabs-adapter.js';
 
 export const VoiceService = {
     player: new AudioPlayer(),
@@ -44,15 +51,27 @@ export const VoiceService = {
             const engine = getTTSEngine();
             console.log(`[Voice] Requesting synthesis (${engine}):`, text.substring(0, 20) + '...');
 
-            console.log('[Voice] Calling ttsSynthesize IPC...');
             let result;
-            try {
-                result = await window.electronAPI.ttsSynthesize(text, { engine });
-                console.log('[Voice] IPC returned, result keys:', result ? Object.keys(result) : 'null');
-            } catch (ipcError) {
-                console.error('[Voice] IPC call failed:', ipcError);
-                if (this._onEnd) this._onEnd();
-                return;
+            if (engine === TTS_ENGINE.ELEVEN_LABS) {
+                const apiKey = getElevenLabsApiKey();
+                if (!apiKey) {
+                    console.error('[Voice] ElevenLabs API key missing');
+                    if (this._onEnd) this._onEnd();
+                    return;
+                }
+                const voiceId = getElevenLabsVoiceId() || DEFAULT_VOICE_ID;
+                console.log('[Voice] Calling ElevenLabs API, voice:', voiceId);
+                result = await elevenLabsSynthesize(text, { apiKey, voiceId });
+            } else {
+                console.log('[Voice] Calling ttsSynthesize IPC...');
+                try {
+                    result = await window.electronAPI.ttsSynthesize(text, { engine });
+                    console.log('[Voice] IPC returned, result keys:', result ? Object.keys(result) : 'null');
+                } catch (ipcError) {
+                    console.error('[Voice] IPC call failed:', ipcError);
+                    if (this._onEnd) this._onEnd();
+                    return;
+                }
             }
 
             if (result.error) {
@@ -70,11 +89,8 @@ export const VoiceService = {
             console.log('[Voice] Got audio, length:', result.audio.length);
 
             // 2. Start Playback & Sync
-            console.log('[Voice] Starting MouthSync');
             MouthSync.start();
-
-            console.log('[Voice] Starting AudioPlayer.play()');
-            await this.player.play(result.audio);
+            await this.player.play(result.audio, result.mimeType);
             console.log('[Voice] Playback complete');
 
         } catch (error) {

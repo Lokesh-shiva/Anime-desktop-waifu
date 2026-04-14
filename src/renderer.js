@@ -18,7 +18,18 @@ import { buildSystemPrompt } from './memory/prompt-builder.js';
 import { getTimeOfDayTone, getInputRhythmHint, IdlePresence } from './presence/presence.js';
 import { AvatarBridge } from './avatar/avatar-bridge.js';
 import { VoiceService } from './voice/voice-service.js';
-import { isVoiceEnabled, setVoiceEnabled, getTTSEngine, setTTSEngine } from './settings.js';
+import {
+    isVoiceEnabled,
+    setVoiceEnabled,
+    getTTSEngine,
+    setTTSEngine,
+    TTS_ENGINE,
+    getElevenLabsApiKey,
+    setElevenLabsApiKey,
+    getElevenLabsVoiceId,
+    setElevenLabsVoiceId
+} from './settings.js';
+import { ELEVENLABS_VOICES, DEFAULT_VOICE_ID } from './voice/elevenlabs-adapter.js';
 
 // Expose memoryManager globally for DevTools debugging
 window.memoryManager = memoryManager;
@@ -38,6 +49,9 @@ const avatarToggle = document.getElementById('avatar-toggle');
 const voiceToggle = document.getElementById('voice-toggle');
 const ttsRadios = document.querySelectorAll('input[name="tts-engine"]');
 const voiceSettingsGroup = document.getElementById('voice-settings-group');
+const elevenLabsGroup = document.getElementById('elevenlabs-settings-group');
+const elevenLabsKeyInput = document.getElementById('elevenlabs-key-input');
+const elevenLabsVoiceSelect = document.getElementById('elevenlabs-voice-select');
 const modelSelect = document.getElementById('model-select');
 
 // Typing rhythm tracking (for input sensitivity)
@@ -353,6 +367,32 @@ function initSettings() {
     if (voiceSettingsGroup) {
         voiceSettingsGroup.classList.toggle('hidden', !isVoiceEnabled());
     }
+
+    // Populate ElevenLabs voice dropdown
+    if (elevenLabsVoiceSelect) {
+        elevenLabsVoiceSelect.innerHTML = '';
+        for (const v of ELEVENLABS_VOICES) {
+            const opt = document.createElement('option');
+            opt.value = v.id;
+            opt.textContent = v.name;
+            elevenLabsVoiceSelect.appendChild(opt);
+        }
+        elevenLabsVoiceSelect.value = getElevenLabsVoiceId() || DEFAULT_VOICE_ID;
+    }
+
+    // Populate ElevenLabs API key
+    if (elevenLabsKeyInput) {
+        elevenLabsKeyInput.value = getElevenLabsApiKey() || '';
+    }
+
+    // Show ElevenLabs subgroup only when engine = elevenlabs and voice is on
+    updateElevenLabsVisibility();
+}
+
+function updateElevenLabsVisibility() {
+    if (!elevenLabsGroup) return;
+    const show = isVoiceEnabled() && getTTSEngine() === TTS_ENGINE.ELEVEN_LABS;
+    elevenLabsGroup.classList.toggle('hidden', !show);
 }
 
 /**
@@ -422,6 +462,7 @@ if (voiceToggle) {
         if (voiceSettingsGroup) {
             voiceSettingsGroup.classList.toggle('hidden', !e.target.checked);
         }
+        updateElevenLabsVisibility();
         if (!e.target.checked) {
             VoiceService.stop();
         }
@@ -432,8 +473,27 @@ if (voiceToggle) {
 ttsRadios.forEach(radio => {
     radio.addEventListener('change', (e) => {
         setTTSEngine(e.target.value);
+        updateElevenLabsVisibility();
     });
 });
+
+// ElevenLabs API key (debounced)
+let elevenLabsKeyTimeout;
+if (elevenLabsKeyInput) {
+    elevenLabsKeyInput.addEventListener('input', (e) => {
+        clearTimeout(elevenLabsKeyTimeout);
+        elevenLabsKeyTimeout = setTimeout(() => {
+            setElevenLabsApiKey(e.target.value.trim());
+        }, 500);
+    });
+}
+
+// ElevenLabs voice selection
+if (elevenLabsVoiceSelect) {
+    elevenLabsVoiceSelect.addEventListener('change', (e) => {
+        setElevenLabsVoiceId(e.target.value);
+    });
+}
 
 // Model Select
 if (modelSelect) {

@@ -19,13 +19,14 @@ export class AudioPlayer {
 
     /**
      * Decode base64 audio and play
-     * @param {string} b64Audio - Base64 encoded WAV
+     * @param {string} b64Audio - Base64-encoded audio bytes
+     * @param {string} [mimeType='audio/wav'] - MIME type (e.g. 'audio/mpeg' for ElevenLabs MP3)
      */
-    async play(b64Audio) {
+    async play(b64Audio, mimeType = 'audio/wav') {
         try {
             this.stop(); // Stop any current playback
 
-            console.log('[AudioPlayer] Starting playback, data length:', b64Audio?.length || 0);
+            console.log('[AudioPlayer] Starting playback, data length:', b64Audio?.length || 0, 'type:', mimeType);
 
             if (!b64Audio || b64Audio.length === 0) {
                 console.error('[AudioPlayer] No audio data received');
@@ -34,7 +35,7 @@ export class AudioPlayer {
             }
 
             // Create data URL from base64
-            const dataUrl = `data:audio/wav;base64,${b64Audio}`;
+            const dataUrl = `data:${mimeType};base64,${b64Audio}`;
             console.log('[AudioPlayer] Created data URL');
 
             // Create Audio element

@@ -9,7 +9,9 @@ const STORAGE_KEYS = {
     MODEL_MODE: 'waifu_model_mode',
     CLOUD_API_KEY: 'waifu_cloud_api_key',
     VOICE_ENABLED: 'waifu_voice_enabled',
-    TTS_ENGINE: 'waifu_tts_engine'
+    TTS_ENGINE: 'waifu_tts_engine',
+    ELEVENLABS_API_KEY: 'waifu_elevenlabs_api_key',
+    ELEVENLABS_VOICE_ID: 'waifu_elevenlabs_voice_id'
 };
 
 // Model selection modes
@@ -22,7 +24,8 @@ export const MODEL_MODE = Object.freeze({
 // TTS Engine types
 export const TTS_ENGINE = Object.freeze({
     SYSTEM: 'system',           // pyttsx3 (CPU)
-    STYLE_TTS: 'styletts2'      // StyleTTS2 (GPU/Heavy CPU)
+    STYLE_TTS: 'styletts2',     // StyleTTS2 (GPU/Heavy CPU)
+    ELEVEN_LABS: 'elevenlabs'   // ElevenLabs cloud API
 });
 
 // Settings listeners for reactive updates
@@ -130,9 +133,47 @@ export function setTTSEngine(engine) {
 }
 
 /**
- * Check if cloud is configured (has API key)
- * @returns {boolean}
+ * Get ElevenLabs API key
+ * @returns {string|null}
  */
+export function getElevenLabsApiKey() {
+    return localStorage.getItem(STORAGE_KEYS.ELEVENLABS_API_KEY) || null;
+}
+
+/**
+ * Set ElevenLabs API key
+ * @param {string} key
+ */
+export function setElevenLabsApiKey(key) {
+    if (key) {
+        localStorage.setItem(STORAGE_KEYS.ELEVENLABS_API_KEY, key);
+    } else {
+        localStorage.removeItem(STORAGE_KEYS.ELEVENLABS_API_KEY);
+    }
+    notifyListeners({ type: 'elevenLabsApiKey', value: !!key });
+    console.log('[Settings] ElevenLabs API key', key ? 'set' : 'cleared');
+}
+
+/**
+ * Get selected ElevenLabs voice ID
+ * @returns {string|null}
+ */
+export function getElevenLabsVoiceId() {
+    return localStorage.getItem(STORAGE_KEYS.ELEVENLABS_VOICE_ID) || null;
+}
+
+/**
+ * Set ElevenLabs voice ID
+ * @param {string} voiceId
+ */
+export function setElevenLabsVoiceId(voiceId) {
+    if (voiceId) {
+        localStorage.setItem(STORAGE_KEYS.ELEVENLABS_VOICE_ID, voiceId);
+    } else {
+        localStorage.removeItem(STORAGE_KEYS.ELEVENLABS_VOICE_ID);
+    }
+    notifyListeners({ type: 'elevenLabsVoiceId', value: voiceId });
+}
 
 /**
  * Subscribe to settings changes
@@ -167,6 +208,10 @@ export const Settings = {
     setVoiceEnabled,
     getTTSEngine,
     setTTSEngine,
+    getElevenLabsApiKey,
+    setElevenLabsApiKey,
+    getElevenLabsVoiceId,
+    setElevenLabsVoiceId,
     subscribe
 };
 
