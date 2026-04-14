@@ -39,9 +39,28 @@
           </label>
         </div>
       </div>
+      <div id="cloud-provider-group" class="settings-group hidden">
+        <label class="settings-label">Cloud Provider</label>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="cloud-provider" value="gemini" checked>
+            <span>Google Gemini</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="cloud-provider" value="openrouter">
+            <span>OpenRouter</span>
+          </label>
+        </div>
+      </div>
+
       <div id="api-key-group" class="settings-group hidden">
-        <label class="settings-label" for="api-key-input">API Key</label>
+        <label class="settings-label" for="api-key-input">Gemini API Key</label>
         <input type="password" id="api-key-input" placeholder="Enter Gemini API key" autocomplete="off">
+      </div>
+
+      <div id="openrouter-key-group" class="settings-group hidden">
+        <label class="settings-label" for="openrouter-key-input">OpenRouter API Key</label>
+        <input type="password" id="openrouter-key-input" placeholder="Enter OpenRouter API key" autocomplete="off">
       </div>
 
       <!-- Avatar Model Selection -->
@@ -94,6 +113,11 @@
           autocomplete="off">
         <label class="settings-label" for="elevenlabs-voice-select" style="margin-top: 8px;">Voice</label>
         <select id="elevenlabs-voice-select" class="settings-select"></select>
+        <button id="elevenlabs-test-btn" class="action-btn"
+          style="margin-top: 8px; padding: 6px 10px; font-size: 12px;">
+          Test ElevenLabs
+        </button>
+        <div id="elevenlabs-test-status" style="margin-top: 6px; font-size: 11px; color: #ccc;"></div>
       </div>
 
       <!-- TEMPORARY: Debug Emotion Triggers -->

@@ -11,7 +11,11 @@ import {
     getModelMode,
     setModelMode,
     getCloudApiKey,
-    setCloudApiKey
+    setCloudApiKey,
+    getCloudProvider,
+    setCloudProvider,
+    getOpenRouterApiKey,
+    setOpenRouterApiKey
 } from './settings.js';
 import { memoryManager } from './memory/memory-manager.js';
 import { buildSystemPrompt } from './memory/prompt-builder.js';
@@ -42,8 +46,12 @@ const userInput = document.getElementById('user-input');
 const settingsBtn = document.getElementById('settings-btn');
 const settingsPanel = document.getElementById('settings-panel');
 const modeRadios = document.querySelectorAll('input[name="model-mode"]');
+const cloudProviderRadios = document.querySelectorAll('input[name="cloud-provider"]');
+const cloudProviderGroup = document.getElementById('cloud-provider-group');
 const apiKeyInput = document.getElementById('api-key-input');
 const apiKeyGroup = document.getElementById('api-key-group');
+const openRouterKeyInput = document.getElementById('openrouter-key-input');
+const openRouterKeyGroup = document.getElementById('openrouter-key-group');
 const presenceIndicator = document.getElementById('presence-indicator');
 const avatarToggle = document.getElementById('avatar-toggle');
 const voiceToggle = document.getElementById('voice-toggle');
@@ -100,7 +108,8 @@ function updateUI(state, payload) {
             showResponse(payload);
             // Trigger voice if enabled
             if (isVoiceEnabled()) {
-                VoiceService.speak(payload);
+                const spoken = typeof payload === 'string' ? payload : (payload?.text || '');
+                if (spoken) VoiceService.speak(spoken);
             }
             break;
     }
@@ -321,11 +330,10 @@ function toggleSettings() {
 
 /**
  * Update API key field visibility based on mode
+ * (kept for backward compat, but now superseded by updateCloudVisibility)
  */
 function updateApiKeyVisibility() {
-    const mode = getModelMode();
-    const needsCloud = mode !== MODEL_MODE.LOCAL_ONLY;
-    apiKeyGroup.classList.toggle('hidden', !needsCloud);
+    // Moved logic to updateCloudVisibility
 }
 
 /**
@@ -385,8 +393,23 @@ function initSettings() {
         elevenLabsKeyInput.value = getElevenLabsApiKey() || '';
     }
 
+    // Set cloud provider
+    const currentProvider = getCloudProvider();
+    cloudProviderRadios.forEach(radio => {
+        radio.checked = radio.value === currentProvider;
+    });
+
+    // Populate cloud API keys
+    if (apiKeyInput) {
+        apiKeyInput.value = getCloudApiKey() || '';
+    }
+    if (openRouterKeyInput) {
+        openRouterKeyInput.value = getOpenRouterApiKey() || '';
+    }
+
     // Show ElevenLabs subgroup only when engine = elevenlabs and voice is on
     updateElevenLabsVisibility();
+    updateCloudVisibility();
 }
 
 function updateElevenLabsVisibility() {
@@ -396,11 +419,33 @@ function updateElevenLabsVisibility() {
 }
 
 /**
+ * Show/hide cloud provider and API key fields based on mode
+ */
+function updateCloudVisibility() {
+    const mode = getModelMode();
+    const isCloudMode = mode !== MODEL_MODE.LOCAL_ONLY;
+
+    // Show cloud provider group if cloud is enabled
+    if (cloudProviderGroup) {
+        cloudProviderGroup.classList.toggle('hidden', !isCloudMode);
+    }
+
+    // Show appropriate API key field
+    const provider = getCloudProvider();
+    if (apiKeyGroup) {
+        apiKeyGroup.classList.toggle('hidden', !isCloudMode || provider !== 'gemini');
+    }
+    if (openRouterKeyGroup) {
+        openRouterKeyGroup.classList.toggle('hidden', !isCloudMode || provider !== 'openrouter');
+    }
+}
+
+/**
  * Handle mode change
  */
 function handleModeChange(e) {
     setModelMode(e.target.value);
-    updateApiKeyVisibility();
+    updateCloudVisibility();
 }
 
 /**
@@ -441,12 +486,33 @@ modeRadios.forEach(radio => {
     radio.addEventListener('change', handleModeChange);
 });
 
-// API key changes (debounced)
-let apiKeyTimeout;
-apiKeyInput.addEventListener('input', (e) => {
-    clearTimeout(apiKeyTimeout);
-    apiKeyTimeout = setTimeout(() => handleApiKeyChange(e), 500);
+// Cloud provider changes
+cloudProviderRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        setCloudProvider(e.target.value);
+        updateCloudVisibility();
+    });
 });
+
+// Gemini API key changes (debounced)
+let apiKeyTimeout;
+if (apiKeyInput) {
+    apiKeyInput.addEventListener('input', (e) => {
+        clearTimeout(apiKeyTimeout);
+        apiKeyTimeout = setTimeout(() => handleApiKeyChange(e), 500);
+    });
+}
+
+// OpenRouter API key changes (debounced)
+let openRouterKeyTimeout;
+if (openRouterKeyInput) {
+    openRouterKeyInput.addEventListener('input', (e) => {
+        clearTimeout(openRouterKeyTimeout);
+        openRouterKeyTimeout = setTimeout(() => {
+            setOpenRouterApiKey(e.target.value.trim());
+        }, 500);
+    });
+}
 
 // Avatar toggle
 if (avatarToggle) {
@@ -492,6 +558,57 @@ if (elevenLabsKeyInput) {
 if (elevenLabsVoiceSelect) {
     elevenLabsVoiceSelect.addEventListener('change', (e) => {
         setElevenLabsVoiceId(e.target.value);
+    });
+}
+
+// ElevenLabs test button — calls API directly with a short sample string
+const elevenLabsTestBtn = document.getElementById('elevenlabs-test-btn');
+const elevenLabsTestStatus = document.getElementById('elevenlabs-test-status');
+if (elevenLabsTestBtn) {
+    elevenLabsTestBtn.addEventListener('click', async () => {
+        const setStatus = (msg, color = '#ccc') => {
+            if (elevenLabsTestStatus) {
+                elevenLabsTestStatus.textContent = msg;
+                elevenLabsTestStatus.style.color = color;
+            }
+            console.log('[EL-Test]', msg);
+        };
+
+        const apiKey = getElevenLabsApiKey();
+        if (!apiKey) {
+            setStatus('No API key set.', '#f88');
+            return;
+        }
+        const voiceId = getElevenLabsVoiceId() || DEFAULT_VOICE_ID;
+
+        elevenLabsTestBtn.disabled = true;
+        setStatus(`Calling API (voice ${voiceId.slice(0, 8)}…)`, '#8cf');
+
+        try {
+            const { synthesize } = await import('./voice/elevenlabs-adapter.js');
+            const t0 = performance.now();
+            const result = await synthesize('Hello, this is a test.', { apiKey, voiceId });
+            const elapsed = Math.round(performance.now() - t0);
+
+            if (result.error) {
+                setStatus(`FAIL (${elapsed}ms): ${result.error}`, '#f88');
+                return;
+            }
+            if (!result.audio) {
+                setStatus(`FAIL (${elapsed}ms): no audio returned`, '#f88');
+                return;
+            }
+
+            setStatus(`OK (${elapsed}ms, ${result.audio.length} b64 chars) — playing…`, '#8f8');
+            const audio = new Audio(`data:${result.mimeType || 'audio/mpeg'};base64,${result.audio}`);
+            audio.onended = () => setStatus(`Playback finished (${elapsed}ms latency)`, '#8f8');
+            audio.onerror = (e) => setStatus(`Playback error: ${e?.message || 'unknown'}`, '#f88');
+            await audio.play();
+        } catch (e) {
+            setStatus(`Exception: ${e.message}`, '#f88');
+        } finally {
+            elevenLabsTestBtn.disabled = false;
+        }
     });
 }
 

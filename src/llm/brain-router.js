@@ -4,9 +4,18 @@
  * Handles model selection, availability checking, and fallback logic
  */
 
-import { getModelMode, MODEL_MODE } from '../settings.js';
+import { getModelMode, MODEL_MODE, getCloudProvider } from '../settings.js';
 import OllamaAdapter from './ollama-adapter.js';
 import CloudAdapter from './cloud-adapter.js';
+import OpenRouterAdapter from './openrouter-adapter.js';
+
+/**
+ * Get the appropriate cloud adapter based on settings
+ */
+function getCloudAdapter() {
+    const provider = getCloudProvider();
+    return provider === 'openrouter' ? OpenRouterAdapter : CloudAdapter;
+}
 
 /**
  * Brain Router - unified LLM interface
@@ -109,7 +118,8 @@ export const BrainRouter = {
      */
     async _generateCloud(prompt, options) {
         try {
-            const response = await CloudAdapter.generate(prompt, options);
+            const adapter = getCloudAdapter();
+            const response = await adapter.generate(prompt, options);
             console.log('[Brain] Cloud response received');
             return response;
         } catch (error) {
@@ -125,11 +135,12 @@ export const BrainRouter = {
      */
     async _generateCloudWithFallback(prompt, options) {
         // Check if cloud is available first
-        const cloudAvailable = await CloudAdapter.isAvailable();
+        const adapter = getCloudAdapter();
+        const cloudAvailable = await adapter.isAvailable();
 
         if (cloudAvailable) {
             try {
-                const response = await CloudAdapter.generate(prompt, options);
+                const response = await adapter.generate(prompt, options);
                 console.log('[Brain] Cloud response received');
                 return response;
             } catch (error) {
@@ -157,18 +168,19 @@ export const BrainRouter = {
      */
     async isAvailable() {
         const mode = getModelMode();
+        const adapter = getCloudAdapter();
 
         switch (mode) {
             case MODEL_MODE.LOCAL_ONLY:
                 return OllamaAdapter.isAvailable();
 
             case MODEL_MODE.CLOUD_ONLY:
-                return CloudAdapter.isAvailable();
+                return adapter.isAvailable();
 
             case MODEL_MODE.CLOUD_PREFERRED:
                 // Available if either works
                 const [cloud, local] = await Promise.all([
-                    CloudAdapter.isAvailable(),
+                    adapter.isAvailable(),
                     OllamaAdapter.isAvailable()
                 ]);
                 return cloud || local;

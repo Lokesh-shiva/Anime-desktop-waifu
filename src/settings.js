@@ -8,6 +8,8 @@
 const STORAGE_KEYS = {
     MODEL_MODE: 'waifu_model_mode',
     CLOUD_API_KEY: 'waifu_cloud_api_key',
+    CLOUD_PROVIDER: 'waifu_cloud_provider',
+    OPENROUTER_API_KEY: 'waifu_openrouter_api_key',
     VOICE_ENABLED: 'waifu_voice_enabled',
     TTS_ENGINE: 'waifu_tts_engine',
     ELEVENLABS_API_KEY: 'waifu_elevenlabs_api_key',
@@ -133,6 +135,51 @@ export function setTTSEngine(engine) {
 }
 
 /**
+ * Get current cloud provider ('gemini' or 'openrouter')
+ * @returns {string}
+ */
+export function getCloudProvider() {
+    const stored = localStorage.getItem(STORAGE_KEYS.CLOUD_PROVIDER);
+    return stored || 'gemini'; // Default to Gemini for backward compat
+}
+
+/**
+ * Set cloud provider
+ * @param {string} provider - 'gemini' or 'openrouter'
+ */
+export function setCloudProvider(provider) {
+    if (!['gemini', 'openrouter'].includes(provider)) {
+        console.error('[Settings] Invalid cloud provider:', provider);
+        return;
+    }
+    localStorage.setItem(STORAGE_KEYS.CLOUD_PROVIDER, provider);
+    notifyListeners({ type: 'cloudProvider', value: provider });
+    console.log('[Settings] Cloud provider changed to:', provider);
+}
+
+/**
+ * Get OpenRouter API key
+ * @returns {string|null}
+ */
+export function getOpenRouterApiKey() {
+    return localStorage.getItem(STORAGE_KEYS.OPENROUTER_API_KEY) || null;
+}
+
+/**
+ * Set OpenRouter API key
+ * @param {string} key
+ */
+export function setOpenRouterApiKey(key) {
+    if (key) {
+        localStorage.setItem(STORAGE_KEYS.OPENROUTER_API_KEY, key);
+    } else {
+        localStorage.removeItem(STORAGE_KEYS.OPENROUTER_API_KEY);
+    }
+    notifyListeners({ type: 'openRouterApiKey', value: !!key });
+    console.log('[Settings] OpenRouter API key', key ? 'set' : 'cleared');
+}
+
+/**
  * Get ElevenLabs API key
  * @returns {string|null}
  */
@@ -208,6 +255,10 @@ export const Settings = {
     setVoiceEnabled,
     getTTSEngine,
     setTTSEngine,
+    getCloudProvider,
+    setCloudProvider,
+    getOpenRouterApiKey,
+    setOpenRouterApiKey,
     getElevenLabsApiKey,
     setElevenLabsApiKey,
     getElevenLabsVoiceId,
