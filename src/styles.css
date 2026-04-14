@@ -192,6 +192,8 @@ body {
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 4px;
+  max-height: 40vh;
+  overflow-y: auto;
 }
 
 .settings-panel.hidden {

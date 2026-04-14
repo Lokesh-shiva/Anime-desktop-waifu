@@ -16,7 +16,7 @@
 
 import * as PIXI from 'pixi.js';
 import { Live2DModel } from 'pixi-live2d-display';
-import { TIMING, PARAM_IDS } from './avatar-config.js';
+import { TIMING, PARAM_IDS, EXPRESSION_TRANSITIONS } from './avatar-config.js';
 
 // Register Live2D with PIXI
 Live2DModel.registerTicker(PIXI.Ticker);
@@ -47,6 +47,9 @@ export class Live2DRenderer {
         // Current target values (for smooth interpolation)
         this.targetValues = {};
         this.currentValues = {};
+
+        // Easing transition state: paramId -> { start, end, elapsed, duration, easing }
+        this.activeTransitions = {};
 
         // Behavior flags
         this.behaviors = {
@@ -170,8 +173,12 @@ export class Live2DRenderer {
      * @param {string} paramId - Parameter ID
      * @param {number} value - Target value
      * @param {boolean} immediate - Skip interpolation
+     * @param {object} [options] - Transition options
+     * @param {number} [options.duration] - Transition duration in seconds
+     * @param {string} [options.easing] - Easing type: 'linear', 'easeOut', 'easeInOut'
+     * @param {number} [options.delay] - Delay before starting transition in seconds
      */
-    setParameter(paramId, value, immediate = false) {
+    setParameter(paramId, value, immediate = false, options = {}) {
         if (!this.hasParameter(paramId)) {
             // Silently skip missing parameters
             return;
@@ -179,8 +186,20 @@ export class Live2DRenderer {
 
         if (immediate) {
             this.currentValues[paramId] = value;
+            delete this.activeTransitions[paramId];
             this._applyParameter(paramId, value);
         } else {
+            const duration = options.duration ?? EXPRESSION_TRANSITIONS.defaultDuration;
+            const easing = options.easing ?? EXPRESSION_TRANSITIONS.defaultEasing;
+            const delay = options.delay ?? 0;
+
+            this.activeTransitions[paramId] = {
+                start: this.currentValues[paramId] ?? 0,
+                end: value,
+                elapsed: -delay, // Negative elapsed = still in delay phase
+                duration,
+                easing
+            };
             this.targetValues[paramId] = value;
         }
     }
@@ -263,22 +282,65 @@ export class Live2DRenderer {
     }
 
     /**
-     * Smoothly interpolate current values toward targets
+     * Smoothly interpolate current values toward targets using easing curves
      */
     _interpolateValues(dt) {
-        const speed = 8.0; // Interpolation speed
+        for (const [paramId, transition] of Object.entries(this.activeTransitions)) {
+            transition.elapsed += dt;
 
-        for (const [paramId, target] of Object.entries(this.targetValues)) {
-            const current = this.currentValues[paramId] ?? target;
-            const diff = target - current;
-
-            if (Math.abs(diff) < 0.001) {
-                this.currentValues[paramId] = target;
-            } else {
-                this.currentValues[paramId] = current + diff * Math.min(1, speed * dt);
+            // Still in delay phase
+            if (transition.elapsed < 0) {
+                this._applyParameter(paramId, transition.start);
+                continue;
             }
 
-            this._applyParameter(paramId, this.currentValues[paramId]);
+            const progress = Math.min(1, transition.elapsed / transition.duration);
+            const easedProgress = this._applyEasing(progress, transition.easing);
+
+            const value = transition.start + (transition.end - transition.start) * easedProgress;
+            this.currentValues[paramId] = value;
+            this._applyParameter(paramId, value);
+
+            // Transition complete
+            if (progress >= 1) {
+                this.currentValues[paramId] = transition.end;
+                delete this.activeTransitions[paramId];
+            }
+        }
+
+        // Handle any target values without active transitions (legacy fallback)
+        for (const [paramId, target] of Object.entries(this.targetValues)) {
+            if (this.activeTransitions[paramId]) continue;
+            const current = this.currentValues[paramId];
+            if (current !== undefined && Math.abs(target - current) < 0.001) continue;
+            this.currentValues[paramId] = target;
+            this._applyParameter(paramId, target);
+        }
+    }
+
+    /**
+     * Apply easing function to progress value (0-1)
+     * @param {number} t - Linear progress (0-1)
+     * @param {string} easing - Easing type
+     * @returns {number} Eased progress (0-1)
+     */
+    _applyEasing(t, easing) {
+        switch (easing) {
+            case 'easeOut':
+                // Cubic ease-out: fast start, smooth deceleration
+                return 1 - Math.pow(1 - t, 3);
+            case 'easeInOut':
+                // Cubic ease-in-out: smooth start and end
+                return t < 0.5
+                    ? 4 * t * t * t
+                    : 1 - Math.pow(-2 * t + 2, 3) / 2;
+            case 'easeOutElastic':
+                // Gentle elastic overshoot for expressive movements
+                if (t === 0 || t === 1) return t;
+                return Math.pow(2, -10 * t) * Math.sin((t - 0.075) * (2 * Math.PI) / 0.3) + 1;
+            case 'linear':
+            default:
+                return t;
         }
     }
 

@@ -246,7 +246,46 @@ ipcMain.handle('get-avatar-model-path', async () => {
 });
 
 /**
- * List available models
+ * Discover loose expression files (.exp3.json) in the model's directory
+ * since some VTube models don't declare them in the model3.json FileReferences.
+ */
+ipcMain.handle('get-model-expressions', async (event, modelPathStr) => {
+    try {
+        let dirPath = modelPathStr;
+        if (modelPathStr.startsWith('file://')) {
+            const url = require('url');
+            dirPath = url.fileURLToPath(modelPathStr);
+        }
+
+        // If the path points to the json file, get its directory
+        if (fs.statSync(dirPath).isFile()) {
+            dirPath = path.dirname(dirPath);
+        }
+
+        const files = fs.readdirSync(dirPath);
+        const exps = files.filter(f => f.endsWith('.exp3.json'));
+
+        // Also check an "Expression" or "expressions" subfolder
+        const subfolders = ['Expression', 'expressions', 'Expressions'];
+        for (const sub of subfolders) {
+            const subPath = path.join(dirPath, sub);
+            if (fs.existsSync(subPath) && fs.statSync(subPath).isDirectory()) {
+                const subFiles = fs.readdirSync(subPath);
+                subFiles.filter(f => f.endsWith('.exp3.json')).forEach(f => {
+                    exps.push(path.join(sub, f).replace(/\\\\/g, '/'));
+                });
+            }
+        }
+
+        return exps;
+    } catch (e) {
+        console.warn(`[Main] Failed to discover expressions for ${modelPathStr}:`, e.message);
+        return [];
+    }
+});
+
+/**
+ * List available models recursively
  */
 ipcMain.handle('get-available-models', async () => {
     const modelsDir = path.join(__dirname, '2D_Livemodel');
@@ -254,32 +293,36 @@ ipcMain.handle('get-available-models', async () => {
 
     if (!fs.existsSync(modelsDir)) return models;
 
-    try {
-        const entries = fs.readdirSync(modelsDir, { withFileTypes: true });
+    function findModels(dir) {
+        try {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
 
-        for (const entry of entries) {
-            if (entry.isDirectory()) {
-                // Check inner directory for .model3.json
-                const subDir = path.join(modelsDir, entry.name);
-                const subFiles = fs.readdirSync(subDir);
-                const modelFile = subFiles.find(f => f.endsWith('.model3.json'));
+            // Files in current dir
+            const fileNames = entries.filter(e => e.isFile()).map(e => e.name);
+            const modelFile = fileNames.find(f => f.endsWith('.model3.json'));
 
-                if (modelFile) {
-                    models.push({
-                        name: entry.name,
-                        path: path.join(subDir, modelFile),
-                        // Look for a preview image commonly named 'preview.png' or similar
-                        preview: subFiles.find(f => f.match(/preview|icon|cover/i) && f.match(/\.png|\.jpg/i))
-                            ? path.join(subDir, subFiles.find(f => f.match(/preview|icon|cover/i) && f.match(/\.png|\.jpg/i)))
-                            : null
-                    });
+            if (modelFile) {
+                models.push({
+                    name: path.basename(dir), // Use ultimate folder name
+                    path: path.join(dir, modelFile),
+                    preview: fileNames.find(f => f.match(/preview|icon|cover/i) && f.match(/\.png|\.jpg/i))
+                        ? path.join(dir, fileNames.find(f => f.match(/preview|icon|cover/i) && f.match(/\.png|\.jpg/i)))
+                        : null
+                });
+            }
+
+            // Recurse into subdirectories
+            for (const entry of entries) {
+                if (entry.isDirectory()) {
+                    findModels(path.join(dir, entry.name));
                 }
             }
+        } catch (e) {
+            console.error('[Main] Failed to scan dir:', dir, e);
         }
-    } catch (e) {
-        console.error('[Main] Failed to scan models:', e);
     }
 
+    findModels(modelsDir);
     return models;
 });
 

@@ -105,13 +105,15 @@ function showUserQuery(query) {
 
 /**
  * Display assistant response
- * @param {string} response 
+ * @param {Object} responseObj 
  */
-function showResponse(response) {
+function showResponse(responseObj) {
     const userQuery = responseArea.querySelector('.user-text');
+    const text = typeof responseObj === 'object' ? responseObj.text : responseObj;
+
     responseArea.innerHTML = `
     ${userQuery ? userQuery.outerHTML : ''}
-    <p class="response-text">${escapeHtml(response)}</p>
+    <p class="response-text">${escapeHtml(text)}</p>
   `;
 }
 
@@ -169,19 +171,23 @@ async function handleSubmit() {
         const systemInstruction = buildSystemPrompt(memoryContext, presenceHints);
 
         // 5. Generate Response
-        const response = await BrainRouter.generate(query, { systemInstruction });
+        const responseObj = await BrainRouter.generate(query, { systemInstruction });
 
-        // 6. Analyze sentiment and send to avatar
-        const sentiment = analyzeSentiment(query, response);
-        AvatarBridge.sendSentiment(sentiment);
+        // 6. Send complex intent to avatar
+        AvatarBridge.sendComplexIntent({
+            emotion: responseObj.emotion,
+            actionHints: responseObj.actionHints
+        });
 
         // 7. Update Memory (in background)
-        memoryManager.addInteraction(query, response);
+        memoryManager.addInteraction(query, responseObj.text);
 
-        StateMachine.transition(EVENTS.LLM_RESPONSE, response);
+        StateMachine.transition(EVENTS.LLM_RESPONSE, responseObj);
     } catch (error) {
         console.error('[Renderer] LLM error:', error);
-        AvatarBridge.sendSentiment('confused');
+        AvatarBridge.sendComplexIntent({
+            emotion: { label: 'confused', intensity: 0.8 }
+        });
         StateMachine.transition(EVENTS.LLM_ERROR, error);
     }
 }
@@ -443,6 +449,26 @@ if (modelSelect) {
         }
     });
 }
+
+// Debug Emotion Triggers — bypass AvatarBridge to avoid enabled-flag blocking
+['happy', 'sad', 'crying', 'angry', 'dark', 'playful', 'surprised', 'embarrassed', 'excited', 'sleepy', 'smug', 'love', 'confused', 'scared', 'disgusted', 'determined', 'curious', 'neutral'].forEach(emo => {
+    const btn = document.getElementById(`btn-dbg-${emo}`);
+    if (btn) {
+        btn.addEventListener('click', () => {
+            const intent = { emotion: { label: emo, intensity: 1.0 } };
+            console.log(`[Debug] Sending emotion directly via IPC:`, emo, intent);
+            // Send via bridge if enabled
+            AvatarBridge.sendComplexIntent(intent);
+            // ALSO send directly via IPC, bypassing bridge enabled flag
+            if (window.electronAPI?.sendToAvatar) {
+                window.electronAPI.sendToAvatar('avatar:intent', intent);
+                console.log(`[Debug] Sent via direct IPC`);
+            } else {
+                console.warn(`[Debug] window.electronAPI.sendToAvatar not available!`);
+            }
+        });
+    }
+});
 
 /**
  * Load available models into dropdown

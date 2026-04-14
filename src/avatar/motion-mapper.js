@@ -29,7 +29,7 @@
  * - Smooth transitions between states
  */
 
-import { PARAM_IDS, STATE_BEHAVIORS, RHYTHM_BEHAVIORS, TONE_EXPRESSIONS } from './avatar-config.js';
+import { PARAM_IDS, STATE_BEHAVIORS, RHYTHM_BEHAVIORS, TONE_EXPRESSIONS, EXPRESSION_TRANSITIONS } from './avatar-config.js';
 
 export class MotionMapper {
     constructor(live2dRenderer) {
@@ -80,18 +80,18 @@ export class MotionMapper {
     }
 
     /**
-     * Apply state-specific head/body pose
+     * Apply state-specific head/body pose with eased transitions
      */
     _applyStatePose(state, behavior) {
+        const opts = this._getTransitionOptions(state === 'THINKING' ? 'thinking' : 'neutral');
+
         if (state === 'THINKING' && behavior.headTilt) {
-            // Thinking tilt
-            this.renderer.setParameter(PARAM_IDS.ANGLE_X, behavior.headTilt.x);
-            this.renderer.setParameter(PARAM_IDS.ANGLE_Y, behavior.headTilt.y);
-            this.renderer.setParameter(PARAM_IDS.ANGLE_Z, behavior.headTilt.z);
+            this.renderer.setParameter(PARAM_IDS.ANGLE_X, behavior.headTilt.x, false, opts);
+            this.renderer.setParameter(PARAM_IDS.ANGLE_Y, behavior.headTilt.y, false, opts);
+            this.renderer.setParameter(PARAM_IDS.ANGLE_Z, behavior.headTilt.z, false, opts);
         } else if (state === 'IDLE') {
-            // Reset to neutral (head sway will take over)
-            this.renderer.setParameter(PARAM_IDS.ANGLE_X, 0);
-            this.renderer.setParameter(PARAM_IDS.ANGLE_Y, 0);
+            this.renderer.setParameter(PARAM_IDS.ANGLE_X, 0, false, opts);
+            this.renderer.setParameter(PARAM_IDS.ANGLE_Y, 0, false, opts);
             // Z is controlled by head sway
         }
     }
@@ -143,62 +143,105 @@ export class MotionMapper {
     }
 
     /**
-     * Apply expression based on tone
+     * Get transition options for a given expression type
+     * @param {string} expressionType - e.g. 'neutral', 'calm', 'energetic', 'thinking'
+     * @returns {{ duration: number, easing: string }}
+     */
+    _getTransitionOptions(expressionType) {
+        return {
+            duration: EXPRESSION_TRANSITIONS.expressionDurations[expressionType]
+                ?? EXPRESSION_TRANSITIONS.defaultDuration,
+            easing: EXPRESSION_TRANSITIONS.expressionEasing[expressionType]
+                ?? EXPRESSION_TRANSITIONS.defaultEasing
+        };
+    }
+
+    /**
+     * Set a parameter with staggered delay based on facial region
+     * @param {string} paramId - Live2D parameter ID
+     * @param {number} value - Target value
+     * @param {string} region - 'eyes' | 'eyebrows' | 'mouth'
+     * @param {string} expressionType - For duration/easing lookup
+     */
+    _setStaggered(paramId, value, region, expressionType) {
+        const opts = this._getTransitionOptions(expressionType);
+        opts.delay = EXPRESSION_TRANSITIONS.stagger[region] ?? 0;
+        this.renderer.setParameter(paramId, value, false, opts);
+    }
+
+    /**
+     * Apply expression based on tone with staggered, eased transitions
      */
     _applyToneExpression(tone) {
         const expr = TONE_EXPRESSIONS[tone] || TONE_EXPRESSIONS.neutral;
+        const type = tone === 'calm' ? 'calm' : tone === 'energetic' ? 'energetic' : 'neutral';
 
-        this.renderer.setParameter(PARAM_IDS.EYE_L_SMILE, expr.eyeSmile);
-        this.renderer.setParameter(PARAM_IDS.EYE_R_SMILE, expr.eyeSmile);
-        this.renderer.setParameter(PARAM_IDS.BROW_L_Y, expr.browY);
-        this.renderer.setParameter(PARAM_IDS.BROW_R_Y, expr.browY);
-        this.renderer.setParameter(PARAM_IDS.MOUTH_FORM, expr.mouthForm);
+        // Eyes lead the expression
+        this._setStaggered(PARAM_IDS.EYE_L_SMILE, expr.eyeSmile, 'eyes', type);
+        this._setStaggered(PARAM_IDS.EYE_R_SMILE, expr.eyeSmile, 'eyes', type);
+
+        // Eyebrows follow
+        this._setStaggered(PARAM_IDS.BROW_L_Y, expr.browY, 'eyebrows', type);
+        this._setStaggered(PARAM_IDS.BROW_R_Y, expr.browY, 'eyebrows', type);
+
+        // Mouth last
+        this._setStaggered(PARAM_IDS.MOUTH_FORM, expr.mouthForm, 'mouth', type);
     }
 
     /**
-     * Apply thinking expression
+     * Apply thinking expression with staggered transitions
      */
     _applyThinkingExpression() {
-        // Slightly raised eyebrows, focused look
-        this.renderer.setParameter(PARAM_IDS.EYE_L_SMILE, 0);
-        this.renderer.setParameter(PARAM_IDS.EYE_R_SMILE, 0);
-        this.renderer.setParameter(PARAM_IDS.BROW_L_Y, 0.3);
-        this.renderer.setParameter(PARAM_IDS.BROW_R_Y, 0.3);
-        this.renderer.setParameter(PARAM_IDS.MOUTH_FORM, 0);
-        this.renderer.setParameter(PARAM_IDS.MOUTH_OPEN_Y, 0);
+        // Eyes: focused, no smile
+        this._setStaggered(PARAM_IDS.EYE_L_SMILE, 0, 'eyes', 'thinking');
+        this._setStaggered(PARAM_IDS.EYE_R_SMILE, 0, 'eyes', 'thinking');
+
+        // Eyebrows: slightly raised (curious)
+        this._setStaggered(PARAM_IDS.BROW_L_Y, 0.3, 'eyebrows', 'thinking');
+        this._setStaggered(PARAM_IDS.BROW_R_Y, 0.3, 'eyebrows', 'thinking');
+
+        // Mouth: closed, neutral form
+        this._setStaggered(PARAM_IDS.MOUTH_FORM, 0, 'mouth', 'thinking');
+        this._setStaggered(PARAM_IDS.MOUTH_OPEN_Y, 0, 'mouth', 'thinking');
     }
 
     /**
-     * Apply neutral expression
+     * Apply neutral expression with staggered transitions
      */
     _applyNeutralExpression() {
-        this.renderer.setParameter(PARAM_IDS.EYE_L_SMILE, 0);
-        this.renderer.setParameter(PARAM_IDS.EYE_R_SMILE, 0);
-        this.renderer.setParameter(PARAM_IDS.BROW_L_Y, 0);
-        this.renderer.setParameter(PARAM_IDS.BROW_R_Y, 0);
-        this.renderer.setParameter(PARAM_IDS.MOUTH_FORM, 0);
-        this.renderer.setParameter(PARAM_IDS.MOUTH_OPEN_Y, 0);
+        // Eyes settle first
+        this._setStaggered(PARAM_IDS.EYE_L_SMILE, 0, 'eyes', 'neutral');
+        this._setStaggered(PARAM_IDS.EYE_R_SMILE, 0, 'eyes', 'neutral');
+
+        // Brows relax
+        this._setStaggered(PARAM_IDS.BROW_L_Y, 0, 'eyebrows', 'neutral');
+        this._setStaggered(PARAM_IDS.BROW_R_Y, 0, 'eyebrows', 'neutral');
+
+        // Mouth relaxes last
+        this._setStaggered(PARAM_IDS.MOUTH_FORM, 0, 'mouth', 'neutral');
+        this._setStaggered(PARAM_IDS.MOUTH_OPEN_Y, 0, 'mouth', 'neutral');
     }
 
     /**
-     * Apply posture based on typing rhythm
+     * Apply posture based on typing rhythm with eased transitions
      */
     _applyRhythmPose(rhythm) {
         const pose = RHYTHM_BEHAVIORS[rhythm] || RHYTHM_BEHAVIORS.normal;
+        const opts = this._getTransitionOptions('rhythm');
 
         if (pose.headTilt) {
-            this.renderer.setParameter(PARAM_IDS.ANGLE_X, pose.headTilt.x);
-            this.renderer.setParameter(PARAM_IDS.ANGLE_Y, pose.headTilt.y);
-            this.renderer.setParameter(PARAM_IDS.ANGLE_Z, pose.headTilt.z);
+            this.renderer.setParameter(PARAM_IDS.ANGLE_X, pose.headTilt.x, false, opts);
+            this.renderer.setParameter(PARAM_IDS.ANGLE_Y, pose.headTilt.y, false, opts);
+            this.renderer.setParameter(PARAM_IDS.ANGLE_Z, pose.headTilt.z, false, opts);
         }
 
         // Focus eyes slightly toward user for fast typing
         if (pose.eyeFocus) {
-            this.renderer.setParameter(PARAM_IDS.EYE_BALL_X, 0);
-            this.renderer.setParameter(PARAM_IDS.EYE_BALL_Y, 0.2);
+            this.renderer.setParameter(PARAM_IDS.EYE_BALL_X, 0, false, opts);
+            this.renderer.setParameter(PARAM_IDS.EYE_BALL_Y, 0.2, false, opts);
         } else {
-            this.renderer.setParameter(PARAM_IDS.EYE_BALL_X, 0);
-            this.renderer.setParameter(PARAM_IDS.EYE_BALL_Y, 0);
+            this.renderer.setParameter(PARAM_IDS.EYE_BALL_X, 0, false, opts);
+            this.renderer.setParameter(PARAM_IDS.EYE_BALL_Y, 0, false, opts);
         }
     }
 

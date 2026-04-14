@@ -119,7 +119,16 @@ export const AvatarBridge = {
     },
 
     /**
-     * Send sentiment to avatar for expression
+     * Send complex intent object to avatar for expressions
+     * @param {Object} intent - { emotion, actionHints }
+     */
+    sendComplexIntent(intent) {
+        if (!this.enabled) return;
+        this._send('avatar:intent', intent);
+    },
+
+    /**
+     * Send sentiment to avatar for expression (legacy fallback)
      * @param {'happy' | 'excited' | 'curious' | 'sad' | 'confused' | 'surprised' | 'neutral'} sentiment 
      */
     sendSentiment(sentiment) {

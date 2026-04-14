@@ -1,0 +1,430 @@
+/**
+ * Avatar Controller
+ * The central orchestrator for the avatar process.
+ * 
+ * Rules:
+ * - Only ONE system writes to Live2D parameters per frame.
+ * - Blends DesiredParameterState from IdleAnimator, MotionIntentMapper, and MouthSync.
+ * - Handles model reloading completely to prevent Pixi memory leaks.
+ */
+
+import { CapabilityRegistry } from './CapabilityRegistry.js';
+import { EmotionMapper } from './EmotionMapper.js';
+import { MotionIntentMapper } from './MotionIntentMapper.js';
+import { MouthSync } from './MouthSync.js';
+import { IdleAnimator } from './IdleAnimator.js';
+
+export class AvatarController {
+    constructor(live2dRenderer) {
+        this.renderer = live2dRenderer; // Still needed for actual PIXI/Live2D execution
+        this.isEnabled = true;
+
+        // Sub-systems
+        this.registry = new CapabilityRegistry();
+        this.emotionMapper = new EmotionMapper(this.registry);
+        this.intentMapper = new MotionIntentMapper(this.registry);
+        this.mouthSync = new MouthSync();
+        this.idleAnimator = new IdleAnimator(this.registry);
+        this.cursorInfluence = {};
+        this.emotionParams = {};
+
+        this.activeEmotion = null;
+
+        // Keep a reference to the bound tick function so we can add/remove it cleanly
+        this.boundTick = this._onTick.bind(this);
+        this.isLooping = false;
+    }
+
+    /**
+     * Start the animation and parameter blending loop
+     */
+    startLoop() {
+        if (!this.isLooping && this.renderer && this.renderer.app) {
+            this.renderer.app.ticker.add(this.boundTick);
+            this.isLooping = true;
+        }
+    }
+
+    /**
+     * Stop the animation loop
+     */
+    stopLoop() {
+        if (this.isLooping && this.renderer && this.renderer.app) {
+            this.renderer.app.ticker.remove(this.boundTick);
+            this.isLooping = false;
+        }
+    }
+
+    /**
+     * Re-initializes everything when a new model loads
+     * Prevents Pixi memory leaks
+     * @param {Live2DModel} newModel 
+     * @param {string} modelPath
+     */
+    async onModelLoaded(newModel, modelPath) {
+        this.stopLoop();
+
+        // Detect capabilities
+        const caps = await this.registry.discover(newModel, modelPath);
+
+        // Pass updated registry to subsystems
+        this.emotionMapper.setRegistry(this.registry);
+        this.intentMapper.setRegistry(this.registry);
+        this.idleAnimator.setRegistry(this.registry);
+
+        console.log('[AvatarController] Capabilities Rebuilt:', Object.keys(caps).filter(k => caps[k]));
+
+        // Clear emotion params on new model
+        this.emotionParams = {};
+        this.currentEmotionValues = {};
+        this.transitionStartValues = {};
+        this.transitionProgress = 1.0; // 1.0 = complete (no transition)
+        this.transitionStartTime = 0;
+
+        // CRITICAL: Monkey-patch the model's internal update to inject our
+        // emotion parameter overrides AFTER the motion/expression/physics
+        // pipeline runs. Without this, pixi-live2d-display's internal update
+        // resets params like ParamEyeLSmile, ParamMouthForm, etc. every frame,
+        // overwriting our manual writes from the ticker.
+        //
+        // We implement SMOOTH TRANSITIONS using time-based linear interpolation
+        // with ease-in-out-cubic easing over a fixed duration.
+        if (newModel.internalModel) {
+            const originalUpdate = newModel.internalModel.update.bind(newModel.internalModel);
+            const controller = this;
+            const TRANSITION_DURATION_MS = 800; // Smooth 0.8 second transition
+
+            // Ease-in-out cubic for natural-feeling transitions
+            const easeInOutCubic = (t) => {
+                return t < 0.5
+                    ? 4 * t * t * t
+                    : 1 - Math.pow(-2 * t + 2, 3) / 2;
+            };
+
+            newModel.internalModel.update = function (dt, now) {
+                // Let the original pipeline run (motions, expressions, physics)
+                originalUpdate(dt, now);
+
+                // Calculate transition progress (0 to 1)
+                if (controller.transitionProgress < 1.0) {
+                    const elapsed = performance.now() - controller.transitionStartTime;
+                    controller.transitionProgress = Math.min(1.0, elapsed / TRANSITION_DURATION_MS);
+                }
+                const t = easeInOutCubic(controller.transitionProgress);
+
+                // Collect all param IDs from both start and target
+                const allParamIds = new Set([
+                    ...Object.keys(controller.emotionParams),
+                    ...Object.keys(controller.transitionStartValues)
+                ]);
+
+                if (allParamIds.size === 0) return;
+
+                const coreModel = this.coreModel;
+                if (!coreModel || !coreModel.setParameterValueById) return;
+
+                for (const paramId of allParamIds) {
+                    const startVal = controller.transitionStartValues[paramId] ?? 0;
+                    const endVal = controller.emotionParams[paramId] ?? 0;
+
+                    // Linearly interpolate with easing
+                    const value = startVal + (endVal - startVal) * t;
+
+                    // Store current value for next transition
+                    controller.currentEmotionValues[paramId] = value;
+
+                    // Apply to core model
+                    if (Math.abs(value) > 0.001 || Math.abs(endVal) > 0.001) {
+                        try {
+                            coreModel.setParameterValueById(paramId, value);
+                        } catch (e) { /* param not found on this model, skip */ }
+                    }
+                }
+
+                // Clean up completed zero-value transitions
+                if (controller.transitionProgress >= 1.0) {
+                    for (const paramId of Object.keys(controller.currentEmotionValues)) {
+                        if (Math.abs(controller.currentEmotionValues[paramId]) < 0.001 &&
+                            !(paramId in controller.emotionParams)) {
+                            delete controller.currentEmotionValues[paramId];
+                            delete controller.transitionStartValues[paramId];
+                        }
+                    }
+                }
+            };
+            console.log('[AvatarController] Patched model.internalModel.update for smooth emotion transitions');
+        }
+
+        // Restart loop
+        this.startLoop();
+    }
+
+    onModelUnloaded() {
+        this.stopLoop();
+        this.registry.reset();
+        this.activeEmotion = null;
+    }
+
+    /**
+     * Set overall enabled state
+     */
+    setEnabled(enabled) {
+        this.isEnabled = enabled;
+        if (!enabled) {
+            this.mouthSync.stop();
+        }
+    }
+
+    /**
+     * Handle state change from brain
+     * @param {'IDLE' | 'THINKING' | 'RESPONDING'} state 
+     */
+    handleStateChange(state) {
+        if (!this.isEnabled) return;
+        console.log('[AvatarController] State mapped:', state);
+
+        this.intentMapper.setAIState(state);
+
+        if (state !== 'RESPONDING') {
+            this.mouthSync.stop();
+        }
+    }
+
+    /**
+     * Handle typing rhythm from brain
+     */
+    handleTypingRhythm(rhythm) {
+        if (!this.isEnabled) return;
+        this.intentMapper.setTypingRhythm(rhythm);
+    }
+
+    /**
+     * Process complex intent object from AI
+     * @param {Object} intent 
+     */
+    handleComplexIntent(intent) {
+        if (!this.isEnabled || !intent) return;
+
+        console.log('[AvatarController] Received intent:', intent);
+
+        if (intent.emotion) {
+            this.activeEmotion = intent.emotion;
+            const result = this.emotionMapper.mapEmotion(intent.emotion);
+            console.log('[AvatarController] Mapped emotion result:', result);
+
+            if (!result) {
+                // Snapshot current values as start, then clear target
+                this._startTransition({});
+                return;
+            }
+
+            // ALWAYS get the parameter-based preset for this emotion as the 
+            // guaranteed visual mechanism. Expression files are unreliable 
+            // (many models don't have them, or they fail to load silently).
+            const label = (intent.emotion.label || intent.emotion.emotionLabel || '').toLowerCase();
+            const intensity = intent.emotion.intensity || 0.8;
+            const paramPreset = this.emotionMapper._getParameterPreset(label, intensity);
+
+            if (paramPreset) {
+                console.log('[AvatarController] Starting smooth transition with', Object.keys(paramPreset).length, 'params');
+                this._startTransition(paramPreset);
+            }
+
+            // ALSO try expression file as an optional bonus on top
+            if (result.type === 'expression' && this.renderer.model) {
+                console.log('[AvatarController] Also trying file expression:', result.name);
+                try {
+                    if (typeof this.renderer.model.expression === 'function') {
+                        this.renderer.model.expression(result.name);
+                    } else if (this.renderer.model.internalModel?.motionManager?.expressionManager) {
+                        this.renderer.model.internalModel.motionManager.expressionManager.setExpression(result.name);
+                    }
+                } catch (e) {
+                    console.warn('[AvatarController] Expression file failed:', e.message);
+                }
+            }
+        }
+    }
+
+    /**
+     * Start a smooth transition from current emotion values to new target params
+     * @param {Object} newParams - Target parameter values
+     */
+    _startTransition(newParams) {
+        // Collect all params involved in this transition
+        const allParamIds = new Set([
+            ...Object.keys(this.currentEmotionValues),
+            ...Object.keys(this.emotionParams),
+            ...Object.keys(newParams)
+        ]);
+
+        // Read ACTUAL current parameter values from the core model.
+        // This is critical because the internal pipeline (motions, physics)
+        // sets params like ParamEyeLOpen=1.0 that we don't track in
+        // currentEmotionValues. Without this, transitions would start
+        // from 0 instead of the model's actual displayed value, causing
+        // instant jumps (e.g., eyes snapping shut instead of slowly closing).
+        let coreModel = null;
+        try {
+            coreModel = this.renderer.model?.internalModel?.coreModel;
+        } catch (e) { /* no core model available */ }
+
+        this.transitionStartValues = {};
+        for (const paramId of allParamIds) {
+            if (paramId in this.currentEmotionValues) {
+                // We've been managing this param — use our tracked value
+                this.transitionStartValues[paramId] = this.currentEmotionValues[paramId];
+            } else {
+                // First time touching this param — read its REAL value from the model
+                const realValue = this._readCoreParamValue(coreModel, paramId);
+                this.transitionStartValues[paramId] = realValue;
+            }
+        }
+
+        // Set new target
+        this.emotionParams = newParams;
+
+        // Reset transition timer
+        this.transitionProgress = 0.0;
+        this.transitionStartTime = performance.now();
+        console.log('[AvatarController] Transition started:', Object.keys(newParams).length, 'target params');
+    }
+
+    /**
+     * Read the actual current value of a parameter from the core model.
+     * Uses multiple API approaches with smart fallback defaults.
+     * @param {Object} coreModel - The Live2D core model
+     * @param {string} paramId - The parameter ID to read
+     * @returns {number} The current parameter value
+     */
+    _readCoreParamValue(coreModel, paramId) {
+        if (!coreModel) return this._getParamDefault(paramId);
+
+        // Try 1: Direct API (Cubism 4 CubismModelSettingsJson wrapping)
+        if (typeof coreModel.getParameterValueById === 'function') {
+            try {
+                const val = coreModel.getParameterValueById(paramId);
+                if (typeof val === 'number' && !isNaN(val)) return val;
+            } catch (e) { /* param might not exist */ }
+        }
+
+        // Try 2: Internal arrays (Cubism 4 core model internals)
+        if (coreModel._parameterIds && coreModel._parameterValues) {
+            const idx = coreModel._parameterIds.indexOf(paramId);
+            if (idx >= 0) {
+                return coreModel._parameterValues[idx];
+            }
+        }
+
+        // Try 3: Cubism framework model wrapper
+        if (coreModel._model && coreModel._model.parameters) {
+            const params = coreModel._model.parameters;
+            if (params.ids) {
+                const idx = params.ids.indexOf(paramId);
+                if (idx >= 0 && params.values) {
+                    return params.values[idx];
+                }
+            }
+        }
+
+        // Fallback: use smart defaults based on param name
+        return this._getParamDefault(paramId);
+    }
+
+    /**
+     * Get a sensible default value for a parameter we can't read
+     * @param {string} paramId
+     * @returns {number}
+     */
+    _getParamDefault(paramId) {
+        // Eyes are normally open
+        if (paramId.includes('EyeLOpen') || paramId.includes('EyeROpen')) return 1.0;
+        // Mouth is normally closed
+        if (paramId.includes('MouthOpen')) return 0;
+        // Everything else defaults to 0
+        return 0;
+    }
+
+    /**
+     * Handle mouth amplitude for voice sync
+     */
+    handleMouthAmplitude(amplitude) {
+        if (!this.isEnabled) return;
+        this.mouthSync.setAmplitude(amplitude);
+    }
+
+    /**
+     * Handle live cursor tracking inputs
+     * @param {Object} influence - Map of param ID to value
+     */
+    setCursorInfluence(influence) {
+        if (!this.isEnabled) return;
+        this.cursorInfluence = influence || {};
+    }
+
+
+    /**
+     * The single frame tick that blends all parameters
+     */
+    _onTick(delta) {
+        if (!this.isEnabled || !this.renderer.model) return;
+
+        // Delta time in seconds (Pixi delta is usually ~1 at 60fps)
+        const dt = delta / 60;
+
+        // 1. Get Intents
+        const intentState = this.intentMapper.getDesiredState();
+
+        // 2. Adjust Idle intensity based on emotions and states
+        let idleIntensity = 1.0;
+        if (this.activeEmotion) idleIntensity = 0.5; // Reduce idle if emotional
+
+        this.idleAnimator.setOverrides({
+            pauseIdleBlink: intentState.pauseIdleBlink,
+            pauseIdleSway: intentState.pauseIdleSway,
+            pauseIdleBreath: intentState.pauseIdleBreath
+        }, idleIntensity);
+
+        // 3. Get Subsystem states
+        const idleState = this.idleAnimator.update(dt);
+        const mouthState = this.mouthSync.update(dt);
+
+        // 4. Blend Parameters
+        const finalParams = {};
+
+        // Base Idle (Lowest priority)
+        Object.assign(finalParams, idleState.parameters);
+
+        // Intent overrides (High priority)
+        Object.assign(finalParams, intentState.parameters);
+
+        // Mouth overrides (Absolute priority if speaking)
+        if (this.mouthSync.isActive()) {
+            Object.assign(finalParams, mouthState.parameters);
+        }
+
+        // NOTE: Emotion params are NOT blended here. They are applied by the
+        // monkey-patched internalModel.update (see onModelLoaded) which runs
+        // AFTER the Live2D pipeline. Writing them here would overwrite the
+        // smooth eased transition with the final target value every frame,
+        // causing instant snapping instead of gradual interpolation.
+
+        // Live cursor tracking overwrites (Additive/Absolute based on intent)
+        Object.assign(finalParams, this.cursorInfluence);
+
+        // 5. Apply to Renderer
+        for (const [paramId, value] of Object.entries(finalParams)) {
+            // Skip params that are currently being transitioned by the emotion system
+            // to prevent overwriting the smooth interpolation
+            if (paramId in this.emotionParams || paramId in this.transitionStartValues) {
+                // Only allow cursor influence to override emotion params
+                if (!Object.prototype.hasOwnProperty.call(this.cursorInfluence, paramId)) {
+                    continue;
+                }
+            }
+
+            const isImmediate = Object.prototype.hasOwnProperty.call(this.cursorInfluence, paramId);
+            this.renderer.setParameter(paramId, value, isImmediate);
+        }
+    }
+}
