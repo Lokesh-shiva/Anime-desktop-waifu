@@ -8,16 +8,20 @@
 
 const API_BASE = 'https://api.elevenlabs.io/v1/text-to-speech';
 
-// Curated voices that match the shy/adorable personality
+// Free-tier pre-made voices (ElevenLabs built-ins, NOT library/community voices)
+// These work on free API without 402 errors
 export const ELEVENLABS_VOICES = Object.freeze([
-    { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah (soft, warm)' },
-    { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (gentle, calm)' },
-    { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli (youthful, soft)' },
-    { id: 'jsCqWAovK2LkecY7zXl4', name: 'Freya (airy, sweet)' },
-    { id: 'XrExE9yKIg1WjnnlVkGX', name: 'Matilda (friendly, bright)' }
+    { id: 'piTKgcLEGmPE4e6mEKli', name: 'Nicole (whisper, intimate)' },      // Best for shy/adorable
+    { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella (soft, gentle)' },            // Sweet and warm
+    { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (calm, composed)' },          // Smooth and clear
+    { id: 'LcfcDJNUP1GQjkzn1xUU', name: 'Emily (warm, emotional)' },         // Deep expressiveness
+    { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli (youthful, bright)' },         // Young and energetic
+    { id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte (expressive, warm)' },    // Most emotional range
+    { id: 'ThT5KcBeYPX3keUQqHPh', name: 'Dorothy (pleasant, gentle)' },      // Soft British
+    { id: 'AZnzlk1XvdvUeBnXmlld', name: 'Domi (clear, confident)' }          // Crisp and bright
 ]);
 
-export const DEFAULT_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'; // Sarah
+export const DEFAULT_VOICE_ID = 'piTKgcLEGmPE4e6mEKli'; // Nicole — whisper/intimate, best for shy personality
 const DEFAULT_MODEL_ID = 'eleven_turbo_v2_5'; // Free tier, low latency
 
 /**
