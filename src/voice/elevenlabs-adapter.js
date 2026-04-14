@@ -8,20 +8,14 @@
 
 const API_BASE = 'https://api.elevenlabs.io/v1/text-to-speech';
 
-// Free-tier pre-made voices (ElevenLabs built-ins, NOT library/community voices)
-// These work on free API without 402 errors
+// Free-tier voices confirmed working on ElevenLabs free plan.
+// Most "pre-made" voices are now library voices requiring paid tier.
+// Bella is the one confirmed free voice — upgrade to paid to unlock more.
 export const ELEVENLABS_VOICES = Object.freeze([
-    { id: 'piTKgcLEGmPE4e6mEKli', name: 'Nicole (whisper, intimate)' },      // Best for shy/adorable
-    { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella (soft, gentle)' },            // Sweet and warm
-    { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (calm, composed)' },          // Smooth and clear
-    { id: 'LcfcDJNUP1GQjkzn1xUU', name: 'Emily (warm, emotional)' },         // Deep expressiveness
-    { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli (youthful, bright)' },         // Young and energetic
-    { id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte (expressive, warm)' },    // Most emotional range
-    { id: 'ThT5KcBeYPX3keUQqHPh', name: 'Dorothy (pleasant, gentle)' },      // Soft British
-    { id: 'AZnzlk1XvdvUeBnXmlld', name: 'Domi (clear, confident)' }          // Crisp and bright
+    { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella (soft, gentle) ✓ Free' }
 ]);
 
-export const DEFAULT_VOICE_ID = 'piTKgcLEGmPE4e6mEKli'; // Nicole — whisper/intimate, best for shy personality
+export const DEFAULT_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'; // Bella — only confirmed free voice
 const DEFAULT_MODEL_ID = 'eleven_turbo_v2_5'; // Free tier, low latency
 
 /**

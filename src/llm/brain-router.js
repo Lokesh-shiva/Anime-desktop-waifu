@@ -60,27 +60,59 @@ export const BrainRouter = {
     },
 
     /**
-     * Parse raw string from LLM into structured JSON
+     * Parse raw string from LLM into structured JSON.
+     * Handles local models (phi4-mini) that ramble before/after the JSON block.
      */
     _parseLLMResponse(rawText) {
         let parsed = null;
+
+        // Strategy 1: Pure JSON parse (cloud models usually return clean JSON)
         try {
-            // attempt pure JSON parse
             parsed = JSON.parse(rawText);
-        } catch (e) {
-            // Try stripping markdown blocks
-            try {
-                const stripped = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-                parsed = JSON.parse(stripped);
-            } catch (e2) {
-                // Fallback to extraction
-                console.warn('[Brain] Failed to parse JSON, falling back to text inference.', rawText);
-                parsed = {
-                    text: rawText,
-                    emotion: this._inferEmotionFromText(rawText),
-                    actionHints: {}
-                };
+        } catch (_) {}
+
+        // Strategy 2: Extract ALL {...} blocks, try the LAST complete one first.
+        // phi4-mini often outputs commentary + multiple JSON attempts; the last
+        // block is usually the most complete / correct one.
+        if (!parsed) {
+            const blocks = [];
+            let depth = 0, start = -1;
+            for (let i = 0; i < rawText.length; i++) {
+                if (rawText[i] === '{') {
+                    if (depth === 0) start = i;
+                    depth++;
+                } else if (rawText[i] === '}') {
+                    depth--;
+                    if (depth === 0 && start !== -1) {
+                        blocks.push(rawText.slice(start, i + 1));
+                        start = -1;
+                    }
+                }
             }
+            // Try from last block to first — local models self-correct at the end
+            for (let i = blocks.length - 1; i >= 0; i--) {
+                try {
+                    const candidate = JSON.parse(blocks[i]);
+                    // Only accept if it has a non-empty text field
+                    if (candidate.text && typeof candidate.text === 'string') {
+                        parsed = candidate;
+                        break;
+                    }
+                } catch (_) {}
+            }
+        }
+
+        // Strategy 3: Give up on JSON — extract the first quoted sentence as text
+        if (!parsed) {
+            console.warn('[Brain] Failed to parse JSON, extracting plain text.', rawText.slice(0, 100));
+            // Try to pull a human-readable sentence from the mess
+            const sentenceMatch = rawText.match(/"([^"]{5,200})"/);
+            const fallbackText = sentenceMatch ? sentenceMatch[1] : rawText.slice(0, 200).trim();
+            parsed = {
+                text: fallbackText,
+                emotion: this._inferEmotionFromText(rawText),
+                actionHints: {}
+            };
         }
 
         // Sanitize return
