@@ -16,7 +16,7 @@ export const ELEVENLABS_VOICES = Object.freeze([
 ]);
 
 export const DEFAULT_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'; // Bella — only confirmed free voice
-const DEFAULT_MODEL_ID = 'eleven_turbo_v2_5'; // Free tier, low latency
+const DEFAULT_MODEL_ID = 'eleven_multilingual_v2'; // Better emotional depth than turbo
 
 /**
  * Convert an ArrayBuffer to base64 string (renderer-safe).
@@ -47,13 +47,14 @@ export async function synthesize(text, { apiKey, voiceId } = {}) {
     const body = {
         text,
         model_id: DEFAULT_MODEL_ID,
-        // Intimate, close delivery — low stability = more emotional variance,
-        // high style = expressive not flat, speaker boost = sounds present/near
+        // Speed: 0.7 (slowest) - 1.2 (fastest). 0.78 = soft, deliberate, intimate pace
+        speed: 0.78,
+        // Intimate, emotional delivery tuned for a close companion character
         voice_settings: {
-            stability: 0.30,        // Lower = more emotional, breathy, variable
-            similarity_boost: 0.90, // Stay close to voice character
-            style: 0.55,            // Expressive delivery, not monotone
-            use_speaker_boost: true // Cleaner, more "present" sound
+            stability: 0.22,        // Very low = breathy, emotional, variable — not flat
+            similarity_boost: 0.92, // Stay true to voice character
+            style: 0.65,            // High expressiveness — lets emotion shape the delivery
+            use_speaker_boost: true // Sounds present and close, not distant
         }
     };
 
