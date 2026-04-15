@@ -413,12 +413,18 @@ export class AvatarController {
         Object.assign(finalParams, this.cursorInfluence);
 
         // 5. Apply to Renderer
+        const isSpeaking = this.mouthSync.isActive();
+
         for (const [paramId, value] of Object.entries(finalParams)) {
             // Skip params that are currently being transitioned by the emotion system
-            // to prevent overwriting the smooth interpolation
+            // to prevent overwriting the smooth interpolation.
+            // EXCEPTION: MOUTH_OPEN_Y always wins when voice is playing — emotion
+            // presets (surprised, anger, etc.) that set MOUTH_OPEN_Y would otherwise
+            // freeze the mouth shut during TTS playback.
             if (paramId in this.emotionParams || paramId in this.transitionStartValues) {
-                // Only allow cursor influence to override emotion params
-                if (!Object.prototype.hasOwnProperty.call(this.cursorInfluence, paramId)) {
+                const isMouthParam = paramId === 'ParamMouthOpenY';
+                const isCursorOverride = Object.prototype.hasOwnProperty.call(this.cursorInfluence, paramId);
+                if (!isCursorOverride && !(isMouthParam && isSpeaking)) {
                     continue;
                 }
             }

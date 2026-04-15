@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; connect-src http://localhost:11434 https://generativelanguage.googleapis.com https://openrouter.ai https://api.elevenlabs.io http://127.0.0.1:19765; style-src 'self' 'unsafe-inline'; media-src 'self' data: blob:;">
+    content="default-src 'self'; connect-src http://localhost:11434 https://generativelanguage.googleapis.com https://openrouter.ai https://api.elevenlabs.io https://api.groq.com http://127.0.0.1:19765; style-src 'self' 'unsafe-inline'; media-src 'self' data: blob:;">
   <title>Waifu Assistant</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -120,6 +120,13 @@
         <div id="elevenlabs-test-status" style="margin-top: 6px; font-size: 11px; color: #ccc;"></div>
       </div>
 
+      <!-- Speech-to-Text (Groq Whisper) -->
+      <div class="settings-group" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 4px;">
+        <label class="settings-label" for="groq-stt-key-input">🎤 Speech-to-Text (Groq Whisper)</label>
+        <input type="password" id="groq-stt-key-input" placeholder="Groq API key — free at console.groq.com" autocomplete="off">
+        <div style="margin-top: 4px; font-size: 10px; color: #6b7280;">Hold mic button or Space to talk</div>
+      </div>
+
       <!-- TEMPORARY: Debug Emotion Triggers -->
       <div class="settings-group"
         style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 10px;">
@@ -154,12 +161,20 @@
 
     <!-- Response area -->
     <div id="response-area" class="response-area">
-      <p class="placeholder">Ask me anything...</p>
+      <p class="placeholder">Miko is here. say something soft…</p>
     </div>
 
     <!-- Input area -->
     <div class="input-area">
-      <input type="text" id="user-input" placeholder="Type here and press Enter" autocomplete="off" autofocus>
+      <input type="text" id="user-input" placeholder="whisper to Miko…" autocomplete="off" autofocus>
+      <button id="mic-btn" class="mic-btn" title="Hold to speak (or hold Space)">
+        <svg class="mic-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="9" y="2" width="6" height="11" rx="3" fill="currentColor"/>
+          <path d="M5 11a7 7 0 0 0 14 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="12" y1="18" x2="12" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="9" y1="22" x2="15" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
   </div>
 

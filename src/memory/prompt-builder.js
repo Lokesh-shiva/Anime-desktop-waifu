@@ -42,75 +42,64 @@ function formatFactByConfidence(fact) {
 }
 
 /**
- * Build the full system prompt including memory context
- * @param {Object} memoryContext - { facts: object[], sessionSummary: string }
- * @returns {string} - The complete system prompt
+ * Build the full system prompt including memory context and recent conversation.
+ * @param {Object} memoryContext  - { facts: object[], sessionSummary: string }
+ * @param {Object} presenceHints  - { timeOfDay, inputRhythm } (optional)
+ * @param {Array}  recentMessages - raw { role, content }[] from memoryManager (optional)
+ * @returns {string}
  */
-export function buildSystemPrompt(memoryContext) {
+export function buildSystemPrompt(memoryContext, presenceHints, recentMessages) {
     let prompt = DEFAULT_CONFIG.systemPrompt;
 
-    // Safety check for empty context
-    const hasFacts = memoryContext?.facts && memoryContext.facts.length > 0;
+    const hasFacts   = memoryContext?.facts?.length > 0;
     const hasSummary = !!memoryContext?.sessionSummary;
+    // Only inject the last 6 turns (3 exchanges) so the prompt stays lean
+    const recentTurns = Array.isArray(recentMessages)
+        ? recentMessages.slice(-6)
+        : [];
 
-    if (!hasFacts && !hasSummary) {
+    if (!hasFacts && !hasSummary && recentTurns.length === 0) {
         return prompt;
     }
 
-    // Append memory section securely
-    prompt += `\n\n=== BACKGROUND CONTEXT ===
-This is your internal memory. Use it to sound consistent and attentive.
-DO NOT mention "memory", "remember", or "context" to the user.
-DO NOT quote this section. Just *know* it.
-For uncertain facts (marked "Likely" or "Possibly"), phrase recall vaguely - never assert them strongly.
-`;
+    prompt += `\n\n=== CONTEXT (internal — never quote or reference directly) ===`;
 
-    if (hasSummary) {
-        prompt += `\n[Recent Conversation]\n${memoryContext.sessionSummary}\n`;
+    // ── Recent conversation turns ───────────────────────────────────────────
+    // These are the actual messages from this session. Use them to feel
+    // continuous — pick up threads, notice moods, don't repeat yourself.
+    if (recentTurns.length > 0) {
+        prompt += `\n\n[This conversation so far]\n`;
+        for (const msg of recentTurns) {
+            const speaker = msg.role === 'user' ? 'them' : 'you';
+            prompt += `${speaker}: ${msg.content}\n`;
+        }
     }
 
-    if (hasFacts) {
-        // Group facts by category for better organization
-        const categories = {
-            identity: [],
-            preferences: [],
-            constraints: [],
-            projects: []
-        };
+    // ── Long-term memory ────────────────────────────────────────────────────
+    if (hasSummary || hasFacts) {
+        prompt += `\n[What you know about them]\n`;
+        prompt += `Use this to feel attentive, not to recite facts.\n`;
+        prompt += `For uncertain items (Likely/Possibly), never assert strongly.\n`;
 
-        for (const fact of memoryContext.facts) {
-            const category = fact.category || 'preferences';
-            if (categories[category]) {
-                categories[category].push(fact);
-            } else {
-                categories.preferences.push(fact);
+        if (hasSummary) {
+            prompt += `Context: ${memoryContext.sessionSummary}\n`;
+        }
+
+        if (hasFacts) {
+            const categories = { identity: [], preferences: [], constraints: [], projects: [] };
+            for (const fact of memoryContext.facts) {
+                const cat = fact.category || 'preferences';
+                (categories[cat] || categories.preferences).push(fact);
             }
-        }
-
-        prompt += `\n[Important Facts]\n`;
-
-        // Identity facts first (most reliable)
-        if (categories.identity.length > 0) {
-            const formatted = categories.identity.map(formatFactByConfidence);
-            prompt += formatted.map(f => `- ${f}`).join('\n') + '\n';
-        }
-
-        // Then preferences
-        if (categories.preferences.length > 0) {
-            const formatted = categories.preferences.map(formatFactByConfidence);
-            prompt += formatted.map(f => `- ${f}`).join('\n') + '\n';
-        }
-
-        // Constraints
-        if (categories.constraints.length > 0) {
-            const formatted = categories.constraints.map(formatFactByConfidence);
-            prompt += formatted.map(f => `- ${f}`).join('\n') + '\n';
-        }
-
-        // Projects last (most volatile)
-        if (categories.projects.length > 0) {
-            const formatted = categories.projects.map(formatFactByConfidence);
-            prompt += formatted.map(f => `- ${f}`).join('\n') + '\n';
+            const allFacts = [
+                ...categories.identity,
+                ...categories.preferences,
+                ...categories.constraints,
+                ...categories.projects
+            ];
+            for (const fact of allFacts) {
+                prompt += `- ${formatFactByConfidence(fact)}\n`;
+            }
         }
     }
 

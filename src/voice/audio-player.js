@@ -12,7 +12,7 @@ export class AudioPlayer {
         this.animationFrameId = null;
 
         // Playback rate: 1.0 = normal, 0.85 = ~15% slower, 0.75 = noticeably soft/intimate
-        this.playbackRate = 0.85;
+        this.playbackRate = 0.87;
 
         // For amplitude analysis
         this.audioContext = null;
@@ -74,6 +74,13 @@ export class AudioPlayer {
             // Try to set up amplitude analysis (non-critical - won't crash if it fails)
             try {
                 this._setupAnalysis();
+                // Resume AudioContext — Chromium suspends it until user gesture.
+                // Without this, getByteTimeDomainData returns silent zeros and
+                // the mouth never moves.
+                if (this.audioContext && this.audioContext.state === 'suspended') {
+                    await this.audioContext.resume();
+                    console.log('[AudioPlayer] AudioContext resumed');
+                }
             } catch (analysisError) {
                 console.warn('[AudioPlayer] Could not setup amplitude analysis:', analysisError);
             }
@@ -82,6 +89,7 @@ export class AudioPlayer {
             console.log('[AudioPlayer] Playing audio...');
             await this.audio.play();
             this.isPlayingState = true;
+            this._flatFrames = 0; // Reset flat-signal counter
             console.log('[AudioPlayer] Playback started');
 
             // Start amplitude analysis loop
@@ -167,7 +175,13 @@ export class AudioPlayer {
     }
 
     /**
-     * Animation loop for amplitude analysis
+     * Animation loop for amplitude analysis.
+     *
+     * Primary path: Web Audio AnalyserNode RMS from the live audio stream.
+     * Fallback path: cosine-wave simulation — triggers automatically when the
+     * analyser returns near-silence for >10 frames while audio is playing.
+     * This covers the common case where AudioContext stays suspended or the
+     * data-URL source doesn't feed through the graph in some Electron builds.
      */
     _analyze() {
         if (!this.isPlayingState) return;
@@ -187,13 +201,31 @@ export class AudioPlayer {
                 }
                 const rms = Math.sqrt(sum / dataArray.length);
                 visualAmp = Math.min(1.0, rms * 4.0);
+
+                // Flat-signal guard: if RMS is suspiciously low for many frames
+                // while we know audio is playing, fall back to cosine simulation.
+                if (rms < 0.002) {
+                    this._flatFrames = (this._flatFrames || 0) + 1;
+                } else {
+                    this._flatFrames = 0;
+                }
+
+                if (this._flatFrames > 10) {
+                    // AudioContext likely suspended or source not wired — simulate
+                    const t = performance.now() / 1000;
+                    visualAmp = 0.25 + 0.22 * Math.abs(Math.sin(t * 4.5)) +
+                                0.10 * Math.abs(Math.sin(t * 9.1));
+                }
             } catch (e) {
-                // Fallback: simple time-based simulation
-                visualAmp = Math.random() * 0.3 + 0.2;
+                // Fallback: cosine simulation
+                const t = performance.now() / 1000;
+                visualAmp = 0.25 + 0.22 * Math.abs(Math.sin(t * 4.5));
             }
         } else {
-            // Fallback: simple time-based simulation if no analyser
-            visualAmp = Math.random() * 0.3 + 0.2;
+            // No analyser at all — cosine simulation
+            const t = performance.now() / 1000;
+            visualAmp = 0.25 + 0.22 * Math.abs(Math.sin(t * 4.5)) +
+                        0.10 * Math.abs(Math.sin(t * 9.1));
         }
 
         if (this.amplitudeCallback) {

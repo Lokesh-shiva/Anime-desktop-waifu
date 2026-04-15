@@ -13,7 +13,8 @@ const STORAGE_KEYS = {
     VOICE_ENABLED: 'waifu_voice_enabled',
     TTS_ENGINE: 'waifu_tts_engine',
     ELEVENLABS_API_KEY: 'waifu_elevenlabs_api_key',
-    ELEVENLABS_VOICE_ID: 'waifu_elevenlabs_voice_id'
+    ELEVENLABS_VOICE_ID: 'waifu_elevenlabs_voice_id',
+    GROQ_STT_API_KEY: 'waifu_groq_stt_api_key'
 };
 
 // Model selection modes
@@ -223,6 +224,28 @@ export function setElevenLabsVoiceId(voiceId) {
 }
 
 /**
+ * Get Groq STT API key
+ * @returns {string|null}
+ */
+export function getGroqSttApiKey() {
+    return localStorage.getItem(STORAGE_KEYS.GROQ_STT_API_KEY) || null;
+}
+
+/**
+ * Set Groq STT API key
+ * @param {string} key
+ */
+export function setGroqSttApiKey(key) {
+    if (key) {
+        localStorage.setItem(STORAGE_KEYS.GROQ_STT_API_KEY, key);
+    } else {
+        localStorage.removeItem(STORAGE_KEYS.GROQ_STT_API_KEY);
+    }
+    notifyListeners({ type: 'groqSttApiKey', value: !!key });
+    console.log('[Settings] Groq STT API key', key ? 'set' : 'cleared');
+}
+
+/**
  * Subscribe to settings changes
  * @param {function({type: string, value: any}): void} callback
  * @returns {function(): void} - Unsubscribe function
@@ -263,6 +286,8 @@ export const Settings = {
     setElevenLabsApiKey,
     getElevenLabsVoiceId,
     setElevenLabsVoiceId,
+    getGroqSttApiKey,
+    setGroqSttApiKey,
     subscribe
 };
 
