@@ -64,6 +64,12 @@ export class CapabilityRegistry {
                 }
 
                 console.log('[CapabilityRegistry] Total Discovered:', this.availableParams.size, 'parameters');
+                // Check VT_ELF overlay params specifically — if missing they'll fail silently
+                const overlayCheck = ['Param15','Angervis','ParamHateVis','ParamSweatVis','Paramskirtexpend','Param11','Paramtoungevis','ParamBero'];
+                const found = overlayCheck.filter(p => this.availableParams.has(p));
+                const missing = overlayCheck.filter(p => !this.availableParams.has(p));
+                console.log('[CapabilityRegistry] VT_ELF overlays FOUND:', found.join(', ') || 'none');
+                if (missing.length) console.warn('[CapabilityRegistry] VT_ELF overlays MISSING (will silently fail):', missing.join(', '));
                 this._detectFeatures();
             } catch (e) {
                 console.warn('[CapabilityRegistry] Parameter discovery failed:', e.message);

@@ -75,11 +75,16 @@ export const PARAM_IDS = Object.freeze({
     BREATH: 'ParamBreath',
     CHEEK: 'ParamCheek',
 
-    // Model-specific (common in VTuber models)
-    GLARE: 'Param49',           // 瞪眼 - glaring/wide stare eyes
-    PUFFED_CHEEKS: 'Param46',   // 鼓脸 - puffed/pouty cheeks
-    CROOKED_MOUTH: 'Param48',   // 歪嘴 - crooked/asymmetric mouth
-    JAW: 'Param47'              // 下颚 - jaw movement
+    // VT_ELF model-specific parameters (exist on the Elf model)
+    ELF_EAR:       'Param11',          // Elf ear droop/perk (-1 = droop, +1 = perk)
+    ELF_EAR_WAVE:  'Param20',          // Ear wave animation
+    SWEAT_VIS:     'ParamSweatVis',    // Nervousness/sweat drop visibility
+    SKIRT_EXPAND:  'Paramskirtexpend', // Skirt puff (excitement/flustering) — lowercase 's'!
+    TONGUE_VIS:    'Paramtoungevis',   // Tongue visibility
+    BERO:          'ParamBero',        // Tongue wave
+    ANGER_VIS:     'Angervis',         // Anger effect overlay
+    HAPPY_VIS:     'Param15',          // Happiness sparkle effect
+    HATE_VIS:      'ParamHateVis'      // Disgust/hate effect overlay
 });
 
 // State behavior presets

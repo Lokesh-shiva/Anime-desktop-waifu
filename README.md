@@ -53,35 +53,58 @@ A visual companion that reacts to your conversation.
 
 The avatar is a visual layer — she displays what the AI is "feeling," but she's not the AI itself.
 
-### 🗣️ Voice Responses
+### 🗣️ Voice Responses (Neural TTS + STT)
 
-Optional spoken responses to messages.
+High-quality spoken responses and push-to-talk input.
 
-- Uses your system's built-in text-to-speech
-- Toggle voice on/off at any time
-- Adjustable voice selection and speed
+- **ElevenLabs Neural TTS**: Anime-quality expressive voices (free tier available)
+- **Emotion-driven delivery**: Voice stability, style, and speed change based on what Miko is feeling — sad responses sound different from playful ones
+- **System TTS fallback**: Works without an API key using your OS voices
+- **Groq Whisper STT**: Push-to-talk speech input via Groq's free Whisper API
+  - Hold the 🎤 mic button (or hold **Space**) to speak
+  - Release to transcribe and send
+- Toggle voice on/off at any time in Settings
 
-> **Note**: System TTS sounds robotic. Anime-style neural voices are planned for future updates.
+#### Setting Up Voice
 
-### 🎭 Advanced Avatar Features (New!)
+**ElevenLabs (Recommended)**:
+1. Create a free account at [elevenlabs.io](https://elevenlabs.io)
+2. Copy your API key from your profile
+3. Open Settings → paste key under **ElevenLabs API Key**
+4. Select a voice from the dropdown
 
-The avatar system has been upgraded to support dynamic loading and advanced interactions.
+**Groq Speech-to-Text (Push-to-Talk)**:
+1. Get a free API key at [console.groq.com](https://console.groq.com)
+2. Open Settings → paste key under **Speech-to-Text (Groq Whisper)**
+3. Hold the mic button or hold **Space** to talk
 
-- **Multi-Model Support**:
-    - Place any `.model3.json` Live2D model in the `2D_Livemodel` folder.
-    - Switch between models instantly in **Settings**.
-    - The app automatically scans and lists available models.
+### 🎭 Dynamic Emotion Arc System (New!)
 
-- **Smart Capability Detection**:
-    - The system analyzes each model's parameters automatically.
-    - **Capability Badges**: Settings panel shows you what the current model can do (e.g., 👋 Arms, 😳 Blush, 🤷 Shrug).
-    - If a model lacks "arms", the avatar won't try to wave, preventing broken animations.
+Miko now expresses a full emotional journey across each response — not just a single static expression.
 
-- **Context-Aware Gestures**:
-    - **Wave**: Say "Hi" or "Bye" -> Avatar waves (if supported).
-    - **Blush**: Say "I love you" or "You're cute" -> Avatar blushes.
-    - **Shrug**: Say "I'm confused" or "I don't know" -> Avatar shrugs.
-    - **Bounce/Laugh**: Type "LOL" or "Haha" -> Avatar bounces joyfully.
+- **Multi-beat emotion arcs**: The AI returns 2–3 emotion beats with timing — e.g. `curious (0%) → tender (50%) → shy (85%)`
+- **Timed transitions**: Each beat fires at the right moment during speech, so her face changes as she talks
+- **28+ emotion presets** with smooth 800ms ease-in-out transitions between states
+- **VT_ELF-specific effects**: Elf ear droop/perk, sweat drops (nervousness), tongue-out (playful), skirt puff (excitement), anger marks, sparkle overlay
+
+#### Emotion Labels Available
+
+| Family | Labels |
+|--------|--------|
+| Happy | `happy`, `excited`, `love`, `grateful`, `kind`, `playful`, `smug` |
+| Sad | `sad`, `crying`, `melancholic`, `lonely`, `longing` |
+| Shy | `shy`, `embarrassed`, `flustered`, `hesitant`, `tender`, `calm` |
+| Intense | `anger`, `dark`, `disgusted`, `scared`, `determined` |
+| Other | `surprised`, `curious`, `confused`, `sleepy`, `neutral` |
+
+### 🎭 Advanced Avatar Features
+
+The avatar system supports dynamic model loading and smart capability detection.
+
+- **Multi-Model Support**: Place any `.model3.json` Live2D model in `2D_Livemodel/` and switch instantly in Settings
+- **Smart Capability Detection**: The system auto-discovers each model's parameters — only activates features the model actually supports
+- **Capability Badges**: Settings panel shows what the current model can do (blink, blush, breath, eye smile, etc.)
+- **Cursor tracking**: Avatar's gaze follows your mouse
 
 ### 💾 Intelligent Memory
 
@@ -310,26 +333,26 @@ Electron will open with DevTools available (`Ctrl+Shift+I`).
 
 Voice is completely optional and can be toggled at any time.
 
-### Current Implementation
+### TTS Stack (priority order)
 
-- Uses your operating system's built-in text-to-speech engine
-- On Windows, this is Microsoft SAPI voices
-- Voice selection available in settings
-- Adjustable speaking rate
+1. **ElevenLabs Neural TTS** (recommended) — anime-quality expressive voices, emotion-driven delivery. Requires a free API key.
+2. **System TTS fallback** — uses your OS built-in voices (Microsoft SAPI on Windows). No API key needed, but sounds robotic.
 
-### Honest Expectations
+### Emotion-Driven Voice Delivery
 
-**What it sounds like now**: Robotic. Functional, but clearly synthetic. This is a limitation of system TTS, not something we can fix directly.
+When ElevenLabs is active, voice parameters adjust per emotion:
+- **Sad / longing / lonely** → lower stability, slower rate, softer style
+- **Excited / playful / happy** → higher style, faster rate, more expressive
+- **Calm / tender / neutral** → balanced stability, natural rate
 
-**What's planned**: We're exploring anime-style neural TTS solutions. These would sound more natural and expressive, but they're still in development.
+This means Miko doesn't just say different words — she *sounds* different depending on what she's feeling.
 
-### Why Not Just Include Better Voices?
+### Push-to-Talk (Groq Whisper)
 
-- High-quality neural TTS requires significant resources
-- We want to keep the app lightweight and local-first
-- Bundling voice models would dramatically increase download size
-
-For now, system TTS is a reasonable trade-off. Better voices are on the roadmap.
+Speech input uses Groq's hosted Whisper API (whisper-large-v3-turbo model):
+- Hold **Space** or click the 🎤 button → recording starts
+- Release → audio is sent to Groq → transcribed text appears in the input box and sends automatically
+- Requires a free Groq API key (generous free tier, no credit card needed)
 
 ---
 
@@ -410,15 +433,16 @@ We don't pretend system TTS sounds good. We don't claim the AI is sentient. We b
 
 ## 🗺️ Roadmap
 
-These features are planned but not yet implemented:
-
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Anime-style Neural TTS | 🔬 Research | Higher quality, more expressive voices |
-| Push-to-Talk Input | 📋 Planned | Speak to your companion instead of typing |
-| More Avatar Expressions | 📋 Planned | Richer emotional range |
+| Anime-style Neural TTS | ✅ Done | ElevenLabs neural TTS with emotion-driven delivery |
+| Push-to-Talk Input | ✅ Done | Groq Whisper STT — hold Space or mic button to speak |
+| Dynamic Emotion Arcs | ✅ Done | Avatar expresses 2–3 emotion beats per response with timed transitions |
+| VT_ELF Special Effects | ✅ Done | Elf ears, sweat drops, sparkle, anger marks, skirt puff |
 | Performance Optimizations | 📋 Planned | Lower CPU/memory usage |
 | Cross-platform Support | 🤔 Considering | macOS and Linux builds |
+| Animated Backgrounds | 📋 Planned | Parallax scenes that match the current mood |
+| Memory UI | 📋 Planned | View and edit what your companion remembers |
 
 Want to help with any of these? Contributions welcome!
 
@@ -429,13 +453,16 @@ Want to help with any of these? Contributions welcome!
 Being honest about what doesn't work (yet):
 
 ### Voice Quality
-System TTS sounds robotic. This is a fundamental limitation of built-in voices, not something the app does wrong. Better voices require neural TTS, which is on the roadmap.
+System TTS (fallback) sounds robotic. This is a fundamental limitation of built-in OS voices. For expressive, anime-quality speech, use the **ElevenLabs** integration — see [Setting Up Voice](#setting-up-voice) above.
+
+### ElevenLabs Free Tier
+The free tier has a monthly character limit. For heavy use you may hit it. The app falls back to system TTS automatically when the quota is exhausted.
 
 ### Speech Input
-No speech-to-text yet. You have to type your messages. Push-to-talk is planned for the future.
+Push-to-talk requires a **Groq API key** (free at [console.groq.com](https://console.groq.com)). Without it, type your messages as usual.
 
 ### Avatar Expressions
-The expressiveness depends on the Live2D model. Some models have limited motion/expression parameters. We work with what the model provides.
+Expressiveness depends on the Live2D model loaded. The bundled **VT_ELF** model has the richest parameter set (28+ params, special effects). Other models may not support all emotion presets — the system auto-detects what each model can do.
 
 ### Platform Support
 Only tested on Windows. It *might* work on macOS/Linux, but there are no guarantees.

@@ -106,12 +106,30 @@ export const BrainRouter = {
             }
         }
 
-        // Strategy 3: Give up on JSON — extract the first quoted sentence as text
+        // Strategy 3: Truncated JSON — try to salvage the "text" field specifically.
+        // This handles the case where a long story causes the JSON to be cut mid-string.
         if (!parsed) {
-            console.warn('[Brain] Failed to parse JSON, extracting plain text.', rawText.slice(0, 100));
-            // Try to pull a human-readable sentence from the mess
-            const sentenceMatch = rawText.match(/"([^"]{5,200})"/);
-            const fallbackText = sentenceMatch ? sentenceMatch[1] : rawText.slice(0, 200).trim();
+            console.warn('[Brain] Failed to parse JSON, attempting text field extraction.', rawText.slice(0, 120));
+
+            // Try: extract "text": "..." — handle truncated values by reading until end of string
+            const textFieldMatch = rawText.match(/"text"\s*:\s*"([\s\S]*?)(?:(?<!\\)",|\s*$)/);
+            let fallbackText = '';
+            if (textFieldMatch) {
+                // Unescape any JSON escape sequences in the extracted text
+                fallbackText = textFieldMatch[1]
+                    .replace(/\\n/g, '\n')
+                    .replace(/\\t/g, '\t')
+                    .replace(/\\"/g, '"')
+                    .replace(/\\\\/g, '\\')
+                    .trim();
+            }
+
+            // If that didn't work, grab the first long quoted string as a last resort
+            if (!fallbackText) {
+                const sentenceMatch = rawText.match(/"([^"]{10,}?)"/);
+                fallbackText = sentenceMatch ? sentenceMatch[1] : rawText.slice(0, 300).trim();
+            }
+
             parsed = {
                 text: fallbackText,
                 emotion: this._inferEmotionFromText(rawText),
@@ -119,10 +137,41 @@ export const BrainRouter = {
             };
         }
 
-        // Sanitize return
+        // Normalize emotionArc: accept array or fall back from legacy single emotion
+        const VALID_LABELS = new Set([
+            'happy','sad','crying','anger','angry','dark','playful','surprised','embarrassed',
+            'excited','sleepy','smug','love','confused','scared','disgusted','determined',
+            'curious','shy','grateful','hesitant','melancholic','flustered','tender','calm',
+            'longing','lonely','kind','neutral','menacing'
+        ]);
+
+        let emotionArc = null;
+        if (Array.isArray(parsed.emotionArc) && parsed.emotionArc.length > 0) {
+            emotionArc = parsed.emotionArc
+                .filter(e => e && typeof e.label === 'string' && VALID_LABELS.has(e.label.toLowerCase()))
+                .map(e => ({
+                    label: e.label.toLowerCase(),
+                    intensity: typeof e.intensity === 'number' ? Math.min(1, Math.max(0, e.intensity)) : 0.7,
+                    at: typeof e.at === 'number' ? Math.min(1, Math.max(0, e.at)) : 0
+                }))
+                .sort((a, b) => a.at - b.at);
+            if (emotionArc.length === 0) emotionArc = null;
+        }
+
+        // Backward-compat: legacy single emotion field → wrap as 1-entry arc
+        if (!emotionArc && parsed.emotion) {
+            const e = parsed.emotion;
+            emotionArc = [{ label: (e.label || 'neutral').toLowerCase(), intensity: e.intensity ?? 0.7, at: 0 }];
+        }
+
+        const finalArc = emotionArc || [{ label: 'neutral', intensity: 0.5, at: 0 }];
+        console.log('[Brain] Parsed arc:', finalArc.map(b => `${b.label}@${b.at.toFixed(2)}(${b.intensity.toFixed(2)})`).join(' → '));
+
         return {
             text: parsed.text || '',
-            emotion: parsed.emotion || { label: 'neutral', intensity: 0, sentimentScore: 0 },
+            emotionArc: finalArc,
+            // Keep legacy .emotion as first arc entry so old callsites still work
+            emotion: finalArc[0],
             actionHints: parsed.actionHints || {}
         };
     },

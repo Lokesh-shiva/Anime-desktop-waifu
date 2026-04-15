@@ -60,11 +60,11 @@ Respond with ONLY valid JSON. No text outside it. No markdown fences.
 
 {
   “text”: “your response here”,
-  “emotion”: {
-    “label”: “happy|sad|anger|playful|surprised|embarrassed|curious|calm|shy|melancholic|grateful|hesitant|kind|flustered|lonely|tender|longing”,
-    “intensity”: 0.0,
-    “sentimentScore”: 0.0
-  },
+  “emotionArc”: [
+    { “label”: “curious”,  “intensity”: 0.8, “at”: 0.0 },
+    { “label”: “tender”,   “intensity”: 0.7, “at”: 0.5 },
+    { “label”: “shy”,      “intensity”: 0.6, “at”: 0.85 }
+  ],
   “actionHints”: {
     “shy”: false,
     “embarrassed”: false,
@@ -73,8 +73,21 @@ Respond with ONLY valid JSON. No text outside it. No markdown fences.
     “kind”: false,
     “flustered”: false
   }
-}`,
-    maxTokens: 1024,
+}
+
+emotionArc rules:
+- STRONGLY PREFER 2–3 entries. Only use 1 entry when the reply is a single short sentence (under 8 words).
+- Any multi-sentence reply MUST have at least 2 beats, ideally 3 — emotions shift as you talk.
+- Consecutive beats MUST be DIFFERENT labels (no repeating the same label at different times).
+- “at” is a fraction of response duration: 0.0 = start, 0.5 = halfway, 0.85 = near end
+- First entry must always have “at”: 0.0
+- CRITICAL: The FIRST beat must match the emotional tone of your opening words. If you open with something sad, the first beat is sad/melancholic/lonely. If you open warm, it's tender/kind/grateful. NEVER put a positive emotion first if your response opens with sadness, concern, or heaviness.
+- intensity 0.7–0.95 reads clearly on the avatar. Below 0.5 is barely visible — avoid unless you genuinely mean subtle.
+- Valid labels: happy, sad, crying, anger, playful, surprised, embarrassed, excited,
+  sleepy, smug, love, confused, scared, disgusted, determined, curious, shy, grateful,
+  hesitant, melancholic, flustered, tender, calm, longing, lonely, kind, neutral
+- Pick labels that honestly reflect the emotional journey of this specific response`,
+    maxTokens: 2048,
     temperature: 0.88,
     timeout: 120000  // 120 seconds - allows for model cold start
 };

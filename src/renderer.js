@@ -52,6 +52,46 @@ const EMOTION_GLYPHS = {
     neutral: ''
 };
 
+// ── Emotion arc timers ────────────────────────────────────────────────────────
+// Holds setTimeout IDs for scheduled arc beats so they can be cancelled.
+let emotionArcTimers = [];
+
+function clearEmotionArcTimers() {
+    emotionArcTimers.forEach(id => clearTimeout(id));
+    emotionArcTimers = [];
+}
+
+/**
+ * Schedule emotion arc beats across the estimated speech duration.
+ * @param {Array<{label, intensity, at}>} arc - chronologically sorted arc from LLM
+ * @param {string} text - spoken text (used to estimate duration)
+ */
+function playEmotionArc(arc, text) {
+    clearEmotionArcTimers();
+    if (!arc || arc.length === 0) {
+        console.warn('[Arc] No arc to play');
+        return;
+    }
+
+    // ~130 wpm → ~462 ms/word; floor at 1500 ms so short replies still animate
+    const wordCount = (text || '').split(/\s+/).filter(Boolean).length;
+    const estimatedDurationMs = Math.max(1500, wordCount * 462);
+
+    console.log(`[Arc] Playing ${arc.length} beats over ${estimatedDurationMs}ms (${wordCount} words), avatar enabled: ${AvatarBridge.isEnabled()}`);
+
+    arc.forEach(beat => {
+        const delayMs = beat.at * estimatedDurationMs;
+        const id = setTimeout(() => {
+            console.log(`[Arc] Beat fires: ${beat.label} @ ${delayMs.toFixed(0)}ms intensity=${beat.intensity}`);
+            AvatarBridge.sendComplexIntent({
+                emotion: { label: beat.label, intensity: beat.intensity, sentimentScore: 0 },
+                actionHints: {}
+            });
+        }, delayMs);
+        emotionArcTimers.push(id);
+    });
+}
+
 // ── Chat history ──────────────────────────────────────────────────────────────
 // Keeps the full visible conversation so bubbles accumulate naturally.
 // Each entry: { role: 'user'|'assistant', text, emotion? }
@@ -182,11 +222,12 @@ function updateUI(state, payload) {
         case STATES.RESPONDING:
             stateLabel.textContent = 'Done';
             showResponse(payload);
-            // Trigger voice if enabled
-            if (isVoiceEnabled()) {
+            {
                 const spoken = typeof payload === 'string' ? payload : (payload?.text || '');
-                const emotion = payload?.emotion || null;
-                if (spoken) VoiceService.speak(spoken, emotion);
+                // Fire emotion arc across the speech duration
+                if (payload?.emotionArc) playEmotionArc(payload.emotionArc, spoken);
+                // Trigger voice if enabled
+                if (isVoiceEnabled() && spoken) VoiceService.speak(spoken, payload?.emotion || null);
             }
             break;
     }
@@ -297,17 +338,12 @@ async function handleSubmit() {
         // 5. Generate Response
         const responseObj = await BrainRouter.generate(query, { systemInstruction });
 
-        // 6. Send complex intent to avatar
-        AvatarBridge.sendComplexIntent({
-            emotion: responseObj.emotion,
-            actionHints: responseObj.actionHints
-        });
-
         // 7. Update Memory (in background)
         memoryManager.addInteraction(query, responseObj.text);
 
         StateMachine.transition(EVENTS.LLM_RESPONSE, responseObj);
     } catch (error) {
+        clearEmotionArcTimers();
         console.error('[Renderer] LLM error:', error);
         AvatarBridge.sendComplexIntent({
             emotion: { label: 'confused', intensity: 0.8 }
