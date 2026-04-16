@@ -487,11 +487,9 @@ function _pickReaction(region) {
 function handleAvatarClick(normX, normY) {
     if (!avatarController || !model) return;
 
-    // Ignore only if explicitly mid-response — undefined/IDLE both allow boops
+    // Only block during THINKING (awaiting LLM) — RESPONDING she's already animated
     const aiState = avatarController.intentMapper?.aiState;
-    if (aiState === 'THINKING' || aiState === 'RESPONDING') return;
-    // Also block if currently in a decay transition that came from a conversation beat
-    // (don't block — boop should always interrupt idle state)
+    if (aiState === 'THINKING') return;
 
     // Determine region
     let region = 'body';
