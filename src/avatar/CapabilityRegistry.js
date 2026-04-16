@@ -164,6 +164,7 @@ export class CapabilityRegistry {
         this.capabilities.hasEyeBallXY = this.hasParam(PARAM_IDS.EYE_BALL_X) && this.hasParam(PARAM_IDS.EYE_BALL_Y);
         this.capabilities.hasAngleZ = this.hasParam(PARAM_IDS.ANGLE_Z);
         this.capabilities.hasBodyAngleX = this.hasParam(PARAM_IDS.BODY_ANGLE_X);
+        this.capabilities.hasBodyAngle = this.hasParam(PARAM_IDS.BODY_ANGLE_X) || this.hasParam(PARAM_IDS.BODY_ANGLE_Y) || this.hasParam(PARAM_IDS.BODY_ANGLE_Z);
         this.capabilities.hasBreath = this.hasParam(PARAM_IDS.BREATH);
         this.capabilities.hasCheek = this.hasParam(PARAM_IDS.CHEEK);
         this.capabilities.hasBrowAngle = this.hasParam(PARAM_IDS.BROW_L_ANGLE) || this.hasParam(PARAM_IDS.BROW_R_ANGLE);

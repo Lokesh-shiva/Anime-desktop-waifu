@@ -13,6 +13,7 @@ import { EmotionMapper } from './EmotionMapper.js';
 import { MotionIntentMapper } from './MotionIntentMapper.js';
 import { MouthSync } from './MouthSync.js';
 import { IdleAnimator } from './IdleAnimator.js';
+import { PARAM_IDS } from './avatar-config.js';
 
 export class AvatarController {
     constructor(live2dRenderer) {
@@ -213,24 +214,34 @@ export class AvatarController {
             console.log('[AvatarController] Mapped emotion result:', result);
 
             if (!result) {
-                // Snapshot current values as start, then clear target
                 this._startTransition({});
                 return;
             }
 
-            // ALWAYS get the parameter-based preset for this emotion as the 
-            // guaranteed visual mechanism. Expression files are unreliable 
-            // (many models don't have them, or they fail to load silently).
             const label = (intent.emotion.label || intent.emotion.emotionLabel || '').toLowerCase();
             const intensity = intent.emotion.intensity || 0.8;
-            const paramPreset = this.emotionMapper._getParameterPreset(label, intensity);
 
-            if (paramPreset) {
+            // Base emotion parameter preset
+            let paramPreset = this.emotionMapper._getParameterPreset(label, intensity) || {};
+
+            // Merge actionHints overlay on top — adds reactive bonus effects
+            // (blush, ear droop, sparkle, etc.) without overwriting core expression
+            if (intent.actionHints && typeof intent.actionHints === 'object') {
+                const hintOverlay = this._buildActionHintOverlay(intent.actionHints);
+                const activeHints = Object.entries(intent.actionHints)
+                    .filter(([, v]) => v).map(([k]) => k);
+                if (activeHints.length) {
+                    console.log('[AvatarController] ActionHints active:', activeHints.join(', '));
+                    paramPreset = { ...paramPreset, ...hintOverlay };
+                }
+            }
+
+            if (Object.keys(paramPreset).length > 0) {
                 console.log('[AvatarController] Starting smooth transition with', Object.keys(paramPreset).length, 'params');
                 this._startTransition(paramPreset);
             }
 
-            // ALSO try expression file as an optional bonus on top
+            // Also try expression file as optional bonus
             if (result.type === 'expression' && this.renderer.model) {
                 console.log('[AvatarController] Also trying file expression:', result.name);
                 try {
@@ -244,6 +255,44 @@ export class AvatarController {
                 }
             }
         }
+    }
+
+    /**
+     * Build a parameter overlay from actionHints booleans.
+     * These are additive reactive effects layered ON TOP of the base emotion preset.
+     * They do not override core eye/mouth/brow params — only "bonus" reactive params.
+     * @param {Object} hints - { shy, flustered, embarrassed, grateful, hesitant, kind }
+     * @returns {Object} paramId → value map
+     */
+    _buildActionHintOverlay(hints) {
+        const overlay = {};
+        const caps = this.registry.capabilities;
+
+        // shy / hesitant → eyes glance slightly down, gentle head tilt
+        if (hints.shy || hints.hesitant) {
+            if (caps.hasEyeBallXY) overlay[PARAM_IDS.EYE_BALL_Y] = -0.35;
+            if (caps.hasAngleZ)    overlay[PARAM_IDS.ANGLE_Z]    = -6;
+        }
+
+        // flustered / embarrassed → max blush, elf ear droop, sweat drops, skirt puff
+        if (hints.flustered || hints.embarrassed) {
+            if (caps.hasCheek) overlay[PARAM_IDS.CHEEK] = 1.0;
+            if (this.registry.hasParam(PARAM_IDS.ELF_EAR))   overlay[PARAM_IDS.ELF_EAR]   = -0.5;
+            if (this.registry.hasParam(PARAM_IDS.SWEAT_VIS))  overlay[PARAM_IDS.SWEAT_VIS]  = 1.0;
+            if (this.registry.hasParam(PARAM_IDS.SKIRT_EXPAND)) overlay[PARAM_IDS.SKIRT_EXPAND] = 0.6;
+        }
+
+        // grateful / kind → eye smile + sparkle overlay
+        if (hints.grateful || hints.kind) {
+            if (caps.hasEyeSmile) {
+                overlay[PARAM_IDS.EYE_L_SMILE] = 0.65;
+                overlay[PARAM_IDS.EYE_R_SMILE] = 0.65;
+            }
+            if (this.registry.hasParam(PARAM_IDS.HAPPY_VIS)) overlay[PARAM_IDS.HAPPY_VIS] = 1.0;
+            if (this.registry.hasParam(PARAM_IDS.ELF_EAR))   overlay[PARAM_IDS.ELF_EAR]   = 0.3;
+        }
+
+        return overlay;
     }
 
     /**

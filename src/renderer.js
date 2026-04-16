@@ -65,8 +65,9 @@ function clearEmotionArcTimers() {
  * Schedule emotion arc beats across the estimated speech duration.
  * @param {Array<{label, intensity, at}>} arc - chronologically sorted arc from LLM
  * @param {string} text - spoken text (used to estimate duration)
+ * @param {Object} [actionHints] - hint flags from LLM response, forwarded to every beat
  */
-function playEmotionArc(arc, text) {
+function playEmotionArc(arc, text, actionHints = {}) {
     clearEmotionArcTimers();
     if (!arc || arc.length === 0) {
         console.warn('[Arc] No arc to play');
@@ -85,7 +86,7 @@ function playEmotionArc(arc, text) {
             console.log(`[Arc] Beat fires: ${beat.label} @ ${delayMs.toFixed(0)}ms intensity=${beat.intensity}`);
             AvatarBridge.sendComplexIntent({
                 emotion: { label: beat.label, intensity: beat.intensity, sentimentScore: 0 },
-                actionHints: {}
+                actionHints
             });
         }, delayMs);
         emotionArcTimers.push(id);
@@ -225,7 +226,7 @@ function updateUI(state, payload) {
             {
                 const spoken = typeof payload === 'string' ? payload : (payload?.text || '');
                 // Fire emotion arc across the speech duration
-                if (payload?.emotionArc) playEmotionArc(payload.emotionArc, spoken);
+                if (payload?.emotionArc) playEmotionArc(payload.emotionArc, spoken, payload?.actionHints || {});
                 // Trigger voice if enabled
                 if (isVoiceEnabled() && spoken) VoiceService.speak(spoken, payload?.emotion || null);
             }
