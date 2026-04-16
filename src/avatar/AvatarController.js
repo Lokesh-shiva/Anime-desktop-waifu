@@ -13,6 +13,7 @@ import { EmotionMapper } from './EmotionMapper.js';
 import { MotionIntentMapper } from './MotionIntentMapper.js';
 import { MouthSync } from './MouthSync.js';
 import { IdleAnimator } from './IdleAnimator.js';
+import { GazeAnimator } from './GazeAnimator.js';
 import { PARAM_IDS } from './avatar-config.js';
 
 export class AvatarController {
@@ -26,6 +27,7 @@ export class AvatarController {
         this.intentMapper = new MotionIntentMapper(this.registry);
         this.mouthSync = new MouthSync();
         this.idleAnimator = new IdleAnimator(this.registry);
+        this.gazeAnimator = new GazeAnimator(this.registry);
         this.cursorInfluence = {};
         this.emotionParams = {};
 
@@ -104,6 +106,7 @@ export class AvatarController {
         this.emotionMapper.setRegistry(this.registry);
         this.intentMapper.setRegistry(this.registry);
         this.idleAnimator.setRegistry(this.registry);
+        this.gazeAnimator.setRegistry(this.registry);
 
         console.log('[AvatarController] Capabilities Rebuilt:', Object.keys(caps).filter(k => caps[k]));
 
@@ -282,8 +285,9 @@ export class AvatarController {
                 this._startTransition(paramPreset);
             }
 
-            // Switch blink rhythm to match this emotion's personality
+            // Switch blink rhythm and gaze target to match this emotion
             this.idleAnimator.setBlinkProfile(label);
+            this.gazeAnimator.setEmotion(label, intensity);
 
             // Schedule automatic return to neutral after the emotion-specific linger time.
             // Each arc beat resets the timer, so decay only fires after the final beat.
@@ -320,10 +324,9 @@ export class AvatarController {
         const overlay = {};
         const caps = this.registry.capabilities;
 
-        // shy / hesitant → eyes glance slightly down, gentle head tilt
+        // shy / hesitant → gentle head tilt (gaze handled by GazeAnimator)
         if (hints.shy || hints.hesitant) {
-            if (caps.hasEyeBallXY) overlay[PARAM_IDS.EYE_BALL_Y] = -0.35;
-            if (caps.hasAngleZ)    overlay[PARAM_IDS.ANGLE_Z]    = -6;
+            if (caps.hasAngleZ) overlay[PARAM_IDS.ANGLE_Z] = -6;
         }
 
         // flustered / embarrassed → max blush, elf ear droop, sweat drops, skirt puff
@@ -415,6 +418,7 @@ export class AvatarController {
             this._decayTimer = null;
             console.log(`[AvatarController] Emotion decay: ${label} held ${delayMs}ms → returning to neutral`);
             this.idleAnimator.setBlinkProfile(null);
+            this.gazeAnimator.setEmotion(null);
             this._startTransition({});
         }, delayMs);
     }
@@ -560,6 +564,7 @@ export class AvatarController {
 
         // 3. Get Subsystem states
         const idleState = this.idleAnimator.update(dt);
+        const gazeState = this.gazeAnimator.update(dt);
         const mouthState = this.mouthSync.update(dt);
 
         // 4. Blend Parameters
@@ -581,6 +586,10 @@ export class AvatarController {
         // AFTER the Live2D pipeline. Writing them here would overwrite the
         // smooth eased transition with the final target value every frame,
         // causing instant snapping instead of gradual interpolation.
+
+        // Gaze — emotion-driven eye direction + micro-wander (medium priority)
+        // Applied before cursor so cursor tracking can still override if desired.
+        Object.assign(finalParams, gazeState);
 
         // Live cursor tracking overwrites (Additive/Absolute based on intent)
         Object.assign(finalParams, this.cursorInfluence);
