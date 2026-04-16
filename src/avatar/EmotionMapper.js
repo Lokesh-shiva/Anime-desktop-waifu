@@ -75,20 +75,22 @@ export class EmotionMapper {
             'anger': ['anger', 'angry', 'mad'],
             'playful': ['tongueout', 'tease', 'wink', 'fun'],
             'surprised': ['surprise', 'shock', 'wow'],
-            'embarrassed': ['blush', 'shy', 'embarrassed', 'sad'],
+            'embarrassed': ['blush', 'shy', 'embarrassed'],
             'curious': ['think', 'curious', 'wonder'],
             'neutral': ['neutral', 'normal', 'default'],
             // Shy/adorable personality mappings
-            'shy': ['sad', 'shy', 'neutral'],
+            // NOTE: 'sad' deliberately excluded — shy/flustered/embarrassed use
+            // parameter presets, not expression files, to avoid wrong sad-face display
+            'shy': ['shy'],
             'grateful': ['happy', 'joy', 'smile'],
-            'hesitant': ['sad', 'neutral', 'shy'],
+            'hesitant': ['shy'],
             'melancholic': ['sad', 'sorrow', 'neutral'],
             // Dynamic emotion arc labels
-            'flustered': ['sad', 'embarrassed', 'blush'],
+            'flustered': ['embarrassed', 'blush'],
             'tender':    ['happy', 'smile', 'joy'],
             'calm':      ['neutral', 'default', 'normal'],
-            'longing':   ['sad', 'neutral', 'sorrow'],
-            'lonely':    ['sad', 'sorrow', 'neutral'],
+            'longing':   ['sorrow', 'neutral'],
+            'lonely':    ['sorrow', 'neutral'],
             'kind':      ['happy', 'smile', 'joy']
         };
 
