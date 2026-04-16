@@ -6,9 +6,54 @@
 
 import { PARAM_IDS, TIMING } from './avatar-config.js';
 
+// Blink personality profiles — each emotion gives different blink rhythm and duration.
+// intervalMin/Max are seconds between blinks; duration is seconds for a single blink.
+const BLINK_PROFILES = {
+    // Wide-eyed — blinks are rare and quick (holds gaze)
+    surprised:   { intervalMin: 4.0, intervalMax: 8.0, duration: 0.10 },
+    scared:      { intervalMin: 4.0, intervalMax: 7.0, duration: 0.10 },
+    curious:     { intervalMin: 3.5, intervalMax: 7.0, duration: 0.12 },
+    smug:        { intervalMin: 3.5, intervalMax: 7.0, duration: 0.20 },
+
+    // Slow soft blinks — dreamy / emotional weight
+    love:        { intervalMin: 3.0, intervalMax: 6.0, duration: 0.26 },
+    tender:      { intervalMin: 3.0, intervalMax: 6.0, duration: 0.24 },
+    calm:        { intervalMin: 3.0, intervalMax: 6.5, duration: 0.22 },
+    longing:     { intervalMin: 3.5, intervalMax: 6.5, duration: 0.24 },
+    melancholic: { intervalMin: 3.0, intervalMax: 6.0, duration: 0.26 },
+    sad:         { intervalMin: 3.0, intervalMax: 5.5, duration: 0.28 },
+    lonely:      { intervalMin: 3.0, intervalMax: 5.5, duration: 0.28 },
+    crying:      { intervalMin: 1.5, intervalMax: 3.0, duration: 0.30 }, // frequent heavy blinks
+    kind:        { intervalMin: 2.5, intervalMax: 5.5, duration: 0.20 },
+    grateful:    { intervalMin: 2.5, intervalMax: 5.5, duration: 0.20 },
+
+    // Sleepy — very slow and heavy
+    sleepy:      { intervalMin: 1.8, intervalMax: 3.5, duration: 0.38 },
+
+    // Normal / upbeat
+    happy:       { intervalMin: 2.5, intervalMax: 5.0, duration: 0.15 },
+    playful:     { intervalMin: 2.0, intervalMax: 4.5, duration: 0.14 },
+    excited:     { intervalMin: 2.0, intervalMax: 4.0, duration: 0.13 },
+    determined:  { intervalMin: 2.5, intervalMax: 5.0, duration: 0.14 },
+    confused:    { intervalMin: 2.0, intervalMax: 4.5, duration: 0.15 },
+
+    // Nervous flutter — fast, slightly shorter blinks
+    shy:         { intervalMin: 1.5, intervalMax: 3.5, duration: 0.13 },
+    embarrassed: { intervalMin: 1.5, intervalMax: 3.0, duration: 0.12 },
+    flustered:   { intervalMin: 1.2, intervalMax: 2.8, duration: 0.11 },
+    hesitant:    { intervalMin: 1.8, intervalMax: 3.5, duration: 0.13 },
+
+    // Twitchy / irritable
+    anger:       { intervalMin: 1.5, intervalMax: 3.0, duration: 0.12 },
+    disgusted:   { intervalMin: 1.5, intervalMax: 3.0, duration: 0.12 },
+};
+
 export class IdleAnimator {
     constructor(capabilityRegistry) {
         this.registry = capabilityRegistry;
+
+        // Active blink profile — null means use TIMING defaults
+        this._blinkProfile = null;
 
         this.state = {
             blinkTimer: 0,
@@ -24,6 +69,24 @@ export class IdleAnimator {
         this.pauseSway = false;
         this.pauseBreath = false;
         this.intensityMultiplier = 1.0;
+    }
+
+    /**
+     * Switch blink personality to match the active emotion.
+     * Pass null (or call with no arg) to reset to default neutral rhythm.
+     * @param {string|null} emotionLabel
+     */
+    setBlinkProfile(emotionLabel) {
+        const profile = emotionLabel ? (BLINK_PROFILES[emotionLabel] || null) : null;
+        if (profile === this._blinkProfile) return; // no change
+        this._blinkProfile = profile;
+
+        // If not mid-blink, snap the next interval to the new profile so it
+        // takes effect immediately rather than waiting out the old countdown.
+        if (!this.state.isBlinking) {
+            this.state.blinkTimer = 0;
+            this.state.nextBlinkTime = this._randomBlinkInterval();
+        }
     }
 
     setRegistry(registry) {
@@ -86,7 +149,7 @@ export class IdleAnimator {
             this.state.blinkTimer += dt;
 
             if (this.state.isBlinking) {
-                const progress = this.state.blinkTimer / TIMING.BLINK_DURATION;
+                const progress = this.state.blinkTimer / this._blinkDuration();
                 if (progress >= 1) {
                     this.state.isBlinking = false;
                     this.state.blinkTimer = 0;
@@ -116,6 +179,12 @@ export class IdleAnimator {
     }
 
     _randomBlinkInterval() {
-        return TIMING.BLINK_INTERVAL_MIN + Math.random() * (TIMING.BLINK_INTERVAL_MAX - TIMING.BLINK_INTERVAL_MIN);
+        const min = this._blinkProfile?.intervalMin ?? TIMING.BLINK_INTERVAL_MIN;
+        const max = this._blinkProfile?.intervalMax ?? TIMING.BLINK_INTERVAL_MAX;
+        return min + Math.random() * (max - min);
+    }
+
+    _blinkDuration() {
+        return this._blinkProfile?.duration ?? TIMING.BLINK_DURATION;
     }
 }

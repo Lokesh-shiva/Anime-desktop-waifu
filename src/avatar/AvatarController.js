@@ -282,6 +282,9 @@ export class AvatarController {
                 this._startTransition(paramPreset);
             }
 
+            // Switch blink rhythm to match this emotion's personality
+            this.idleAnimator.setBlinkProfile(label);
+
             // Schedule automatic return to neutral after the emotion-specific linger time.
             // Each arc beat resets the timer, so decay only fires after the final beat.
             this._scheduleDecay(label);
@@ -411,6 +414,7 @@ export class AvatarController {
         this._decayTimer = setTimeout(() => {
             this._decayTimer = null;
             console.log(`[AvatarController] Emotion decay: ${label} held ${delayMs}ms → returning to neutral`);
+            this.idleAnimator.setBlinkProfile(null);
             this._startTransition({});
         }, delayMs);
     }
