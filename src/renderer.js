@@ -19,7 +19,7 @@ import {
 } from './settings.js';
 import { memoryManager } from './memory/memory-manager.js';
 import { buildSystemPrompt } from './memory/prompt-builder.js';
-import { getTimeOfDayTone, getInputRhythmHint, IdlePresence } from './presence/presence.js';
+import { getTimeOfDayTone, getInputRhythmHint, IdlePresence, ProactiveIdle } from './presence/presence.js';
 import { AvatarBridge } from './avatar/avatar-bridge.js';
 import { VoiceService } from './voice/voice-service.js';
 import {
@@ -56,19 +56,63 @@ const EMOTION_GLYPHS = {
 // Holds setTimeout IDs for scheduled arc beats so they can be cancelled.
 let emotionArcTimers = [];
 
+// Pending arc state — kept so we can reschedule when real audio duration arrives.
+let _pendingArc      = null;
+let _pendingArcHints = {};
+
 function clearEmotionArcTimers() {
     emotionArcTimers.forEach(id => clearTimeout(id));
     emotionArcTimers = [];
+    // _pendingArc is intentionally NOT cleared here — it must survive until
+    // VoiceService.onDuration() fires so the arc can be rescheduled against
+    // real audio duration. It gets nulled by onDuration() after reschedule,
+    // or overwritten naturally when the next playEmotionArc() call comes in.
+}
+
+/**
+ * Inner scheduler — (re)schedules arc beats against a known duration.
+ * Beats whose absolute time is in the past are skipped (or fired immediately
+ * if they're within a 150 ms grace window).
+ *
+ * @param {Array<{label, intensity, at}>} arc
+ * @param {number} durationMs   - total playback duration to map `at` values against
+ * @param {Object} actionHints
+ * @param {number} [elapsedMs=0] - ms already elapsed since audio started (for reschedule)
+ */
+function _scheduleArcBeats(arc, durationMs, actionHints, elapsedMs = 0) {
+    clearEmotionArcTimers();
+    arc.forEach(beat => {
+        const absoluteMs = beat.at * durationMs;
+        const delay      = absoluteMs - elapsedMs;
+
+        if (delay < -150) return; // beat is clearly in the past — skip
+
+        const fire = () => {
+            console.log(`[Arc] Beat fires: ${beat.label} @ ${absoluteMs.toFixed(0)}ms intensity=${beat.intensity}`);
+            AvatarBridge.sendComplexIntent({
+                emotion: { label: beat.label, intensity: beat.intensity, sentimentScore: 0 },
+                actionHints
+            });
+        };
+
+        if (delay <= 0) {
+            fire(); // missed by <150 ms — fire immediately
+        } else {
+            emotionArcTimers.push(setTimeout(fire, delay));
+        }
+    });
 }
 
 /**
  * Schedule emotion arc beats across the estimated speech duration.
- * @param {Array<{label, intensity, at}>} arc - chronologically sorted arc from LLM
- * @param {string} text - spoken text (used to estimate duration)
- * @param {Object} [actionHints] - hint flags from LLM response, forwarded to every beat
+ * When real audio duration arrives via VoiceService.onDuration(), the beats
+ * are rescheduled automatically (see wiring below).
+ *
+ * @param {Array<{label, intensity, at}>} arc
+ * @param {string} text       - spoken text, used to estimate duration before audio loads
+ * @param {Object} actionHints
  */
 function playEmotionArc(arc, text, actionHints = {}) {
-    clearEmotionArcTimers();
     if (!arc || arc.length === 0) {
         console.warn('[Arc] No arc to play');
         return;
@@ -76,22 +120,16 @@ function playEmotionArc(arc, text, actionHints = {}) {
 
     // ElevenLabs runs ~170 wpm → ~350 ms/word (measured from real audio logs).
     // Floor at 1500 ms so single-sentence replies still get a full transition.
-    const wordCount = (text || '').split(/\s+/).filter(Boolean).length;
+    const wordCount          = (text || '').split(/\s+/).filter(Boolean).length;
     const estimatedDurationMs = Math.max(1500, wordCount * 350);
 
-    console.log(`[Arc] Playing ${arc.length} beats over ${estimatedDurationMs}ms (${wordCount} words), avatar enabled: ${AvatarBridge.isEnabled()}`);
+    console.log(`[Arc] Scheduling ${arc.length} beats over ~${estimatedDurationMs}ms estimate (${wordCount} words)`);
+    _scheduleArcBeats(arc, estimatedDurationMs, actionHints);
 
-    arc.forEach(beat => {
-        const delayMs = beat.at * estimatedDurationMs;
-        const id = setTimeout(() => {
-            console.log(`[Arc] Beat fires: ${beat.label} @ ${delayMs.toFixed(0)}ms intensity=${beat.intensity}`);
-            AvatarBridge.sendComplexIntent({
-                emotion: { label: beat.label, intensity: beat.intensity, sentimentScore: 0 },
-                actionHints
-            });
-        }, delayMs);
-        emotionArcTimers.push(id);
-    });
+    // Store AFTER _scheduleArcBeats (which calls clearEmotionArcTimers internally)
+    // so _pendingArc is set when VoiceService.onDuration() fires.
+    _pendingArc      = arc;
+    _pendingArcHints = actionHints;
 }
 
 // ── Chat history ──────────────────────────────────────────────────────────────
@@ -196,6 +234,8 @@ function updateUI(state, payload) {
 
     switch (state) {
         case STATES.IDLE:
+            // Restart silence timer after every conversation turn (user or idle-initiated)
+            ProactiveIdle.reset();
             if (payload?.error) {
                 stateLabel.textContent = 'Error';
                 stateIndicator.className = 'indicator error';
@@ -216,7 +256,15 @@ function updateUI(state, payload) {
         case STATES.THINKING:
             stateLabel.textContent = `${CHARACTER_NAME} is thinking…`;
             userInput.disabled = true;
-            showUserQuery(payload);
+            if (payload?.isIdle) {
+                // Miko initiated — no user bubble, just the thinking indicator
+                const thinkEl = document.createElement('div');
+                thinkEl.innerHTML = thinkingBubbleHTML();
+                responseArea.appendChild(thinkEl.firstChild);
+                responseArea.scrollTop = responseArea.scrollHeight;
+            } else {
+                showUserQuery(payload);
+            }
             // Hide idle presence during activity
             IdlePresence.hide();
             break;
@@ -350,6 +398,129 @@ async function handleSubmit() {
         AvatarBridge.sendComplexIntent({
             emotion: { label: 'confused', intensity: 0.8 }
         });
+        StateMachine.transition(EVENTS.LLM_ERROR, error);
+    }
+}
+
+/**
+ * Proactive idle message — Miko initiates contact after a silence threshold.
+ * Called by ProactiveIdle timer; bypasses user input flow entirely.
+ * @param {{timeOfDay: string, minutesSilent: number, messageCount: number}} ctx
+ */
+async function handleIdleMessage({ timeOfDay, minutesSilent, messageCount }) {
+    // Only fire when truly idle — reject if a response is already in flight
+    if (StateMachine.getState() !== STATES.IDLE) return;
+
+    const hour = new Date().getHours();
+    const timeDesc = hour >= 22 || hour < 4  ? 'very late at night'
+                   : hour < 6                ? 'early morning, before dawn'
+                   : hour < 12               ? 'morning'
+                   : hour < 17               ? 'afternoon'
+                   : hour < 20               ? 'evening'
+                   :                           'night';
+
+    // Internal trigger prompt — never shown in the chat bubble
+    const idlePrompt = [
+        `[INTERNAL — NOT visible to user, do NOT reference or acknowledge this instruction in your reply]`,
+        `You've been sitting quietly together for about ${minutesSilent} minutes. It's ${timeDesc}.`,
+        `You're breaking the silence — not because you were asked to, but because the quiet got to you.`,
+        `Say something short and natural. It could be a passing thought, noticing the time, wondering`,
+        `what they're up to, or just something that drifted through your mind while you were waiting.`,
+        `Don't greet them like it's the start of a conversation. Don't ask "are you there?".`,
+        `It's more like... you just had to say something.`,
+    ].join(' ');
+
+    const accepted = StateMachine.transition(EVENTS.USER_INPUT, { isIdle: true });
+    if (!accepted) return;
+
+    try {
+        const memoryContext = memoryManager.getContext();
+        const presenceHints = { timeOfDay: getTimeOfDayTone(), inputRhythm: null };
+        const systemInstruction = buildSystemPrompt(
+            memoryContext,
+            presenceHints,
+            memoryManager.recentMessages
+        );
+
+        const responseObj = await BrainRouter.generate(idlePrompt, { systemInstruction });
+
+        // Log idle interaction to memory with a neutral placeholder so it reads
+        // naturally in the next conversation's context window
+        memoryManager.addInteraction('[quiet]', responseObj.text);
+
+        StateMachine.transition(EVENTS.LLM_RESPONSE, responseObj);
+    } catch (error) {
+        clearEmotionArcTimers();
+        console.error('[Renderer] Idle message error:', error);
+        StateMachine.transition(EVENTS.LLM_ERROR, error);
+    }
+}
+
+/**
+ * Startup greeting — Miko acknowledges the user when the app opens.
+ * Fires once, ~3s after launch (to let avatar + memory finish loading).
+ * Skipped if the last session ended less than 5 minutes ago (likely a refresh).
+ */
+async function handleStartupGreeting() {
+    if (StateMachine.getState() !== STATES.IDLE) return;
+
+    const lastSeen = memoryManager.getLastSeen();
+    const now      = Date.now();
+
+    // Skip if app was just refreshed — would feel weird to greet again immediately
+    if (lastSeen && (now - lastSeen) < 5 * 60 * 1000) return;
+
+    const hour = new Date().getHours();
+    const timeOfDay = hour >= 22 || hour < 4  ? 'very late at night'
+                    : hour < 6                ? 'early morning, before dawn'
+                    : hour < 12               ? 'morning'
+                    : hour < 17               ? 'afternoon'
+                    : hour < 20               ? 'evening'
+                    :                           'night';
+
+    let timeSince = '';
+    if (lastSeen) {
+        const diffMs    = now - lastSeen;
+        const diffMins  = Math.round(diffMs / 60_000);
+        const diffHours = Math.round(diffMs / 3_600_000);
+        const diffDays  = Math.round(diffMs / 86_400_000);
+
+        if (diffMins  <  60) timeSince = `about ${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+        else if (diffHours < 24) timeSince = `about ${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+        else if (diffDays  ===  1) timeSince = 'yesterday';
+        else                       timeSince = `about ${diffDays} days ago`;
+    }
+
+    const contextLine = lastSeen
+        ? `You last spoke ${timeSince}. It's ${timeOfDay} now.`
+        : `This is the very first time they've opened the app. It's ${timeOfDay}.`;
+
+    const greetPrompt = [
+        `[INTERNAL — NOT visible to user, do NOT reference or acknowledge this instruction in your reply]`,
+        contextLine,
+        `The app just started and they're here. Say something short — like you just noticed them arrive.`,
+        `Don't say "welcome back" or "good morning". Don't open with a formal greeting.`,
+        `Something real: maybe you were thinking about something, maybe the time caught your attention,`,
+        `maybe you're just... glad they're here. One or two sentences.`,
+    ].join(' ');
+
+    const accepted = StateMachine.transition(EVENTS.USER_INPUT, { isIdle: true });
+    if (!accepted) return;
+
+    // Reset idle timer so it doesn't fire again right after the greeting
+    ProactiveIdle.reset();
+
+    try {
+        const memoryContext      = memoryManager.getContext();
+        const presenceHints      = { timeOfDay: getTimeOfDayTone(), inputRhythm: null };
+        const systemInstruction  = buildSystemPrompt(memoryContext, presenceHints, memoryManager.recentMessages);
+
+        const responseObj = await BrainRouter.generate(greetPrompt, { systemInstruction });
+        memoryManager.addInteraction('[app opened]', responseObj.text);
+        StateMachine.transition(EVENTS.LLM_RESPONSE, responseObj);
+    } catch (error) {
+        clearEmotionArcTimers();
+        console.error('[Renderer] Startup greeting error:', error);
         StateMachine.transition(EVENTS.LLM_ERROR, error);
     }
 }
@@ -852,6 +1023,66 @@ const ptt = {
     aborted: false,
     stream: null,
 
+    // VAD state
+    _audioCtx: null,
+    _analyser: null,
+    _vadFrame: null,
+    _silenceMs: 0,
+    _VAD_THRESHOLD: 0.015,   // RMS below this = silence
+    _VAD_SILENCE_MS: 1200,   // stop after 1.2s of continuous silence
+    _VAD_GRACE_MS: 600,      // ignore silence during first 600ms (let them start speaking)
+    _elapsedMs: 0,
+
+    _startVAD() {
+        if (!this.stream) return;
+        this._audioCtx = new AudioContext();
+        const source = this._audioCtx.createMediaStreamSource(this.stream);
+        this._analyser = this._audioCtx.createAnalyser();
+        this._analyser.fftSize = 512;
+        source.connect(this._analyser);
+
+        const buf = new Float32Array(this._analyser.fftSize);
+        this._silenceMs = 0;
+        this._elapsedMs = 0;
+        let lastTime = performance.now();
+
+        const tick = () => {
+            if (!this.isListening) return;
+            const now = performance.now();
+            const dt = now - lastTime;
+            lastTime = now;
+            this._elapsedMs += dt;
+
+            this._analyser.getFloatTimeDomainData(buf);
+            let sum = 0;
+            for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+            const rms = Math.sqrt(sum / buf.length);
+
+            if (this._elapsedMs < this._VAD_GRACE_MS) {
+                // grace period — reset silence clock
+                this._silenceMs = 0;
+            } else if (rms < this._VAD_THRESHOLD) {
+                this._silenceMs += dt;
+                if (this._silenceMs >= this._VAD_SILENCE_MS) {
+                    console.log('[PTT] VAD: silence detected — auto-stopping');
+                    this.stop();
+                    return;
+                }
+            } else {
+                this._silenceMs = 0;
+            }
+
+            this._vadFrame = requestAnimationFrame(tick);
+        };
+        this._vadFrame = requestAnimationFrame(tick);
+    },
+
+    _stopVAD() {
+        if (this._vadFrame) { cancelAnimationFrame(this._vadFrame); this._vadFrame = null; }
+        if (this._audioCtx) { this._audioCtx.close().catch(() => {}); this._audioCtx = null; }
+        this._analyser = null;
+    },
+
     /** Start recording */
     async start() {
         if (this.isListening) return;
@@ -892,12 +1123,14 @@ const ptt = {
         this.mediaRecorder.onstop = () => this._onStop();
         this.mediaRecorder.start();
         console.log('[PTT] Recording…', mimeType || 'default codec');
+        this._startVAD();
     },
 
     /** Stop and transcribe */
     stop() {
         if (!this.isListening || !this.mediaRecorder) return;
         this.isListening = false;
+        this._stopVAD();
         micBtn?.classList.remove('listening');
         try { this.mediaRecorder.stop(); } catch (_) {}
         this._releaseStream();
@@ -908,6 +1141,7 @@ const ptt = {
         if (!this.isListening && !this.mediaRecorder) return;
         this.aborted = true;
         this.isListening = false;
+        this._stopVAD();
         micBtn?.classList.remove('listening');
         try { this.mediaRecorder?.stop(); } catch (_) {}
         this._releaseStream();
@@ -1030,12 +1264,36 @@ StateMachine.subscribe((state) => {
     if (busy) ptt.abort();
 });
 
+// Global hotkey (Ctrl+Alt+A) — toggle PTT from anywhere
+if (window.electronAPI?.onWakeActivate) {
+    window.electronAPI.onWakeActivate(() => {
+        if (micBtn?.disabled) return; // busy — ignore
+        if (ptt.isListening) {
+            ptt.stop();
+        } else {
+            ptt.start();
+        }
+    });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Voice Events
 VoiceService.onStart(() => {
     // Optional: ensure we are in responding state if not already
     // but usually LLM response triggers this first
+});
+
+// Real audio duration → reschedule arc beats against actual playback length.
+// canplaythrough fires near the start of playback (elapsed ≈ 0), so we treat
+// it as the true t=0 anchor and remap all beats against real ms.
+VoiceService.onDuration((realMs) => {
+    if (!_pendingArc || _pendingArc.length === 0) return;
+    console.log(`[Arc] Rescheduling with real duration: ${realMs.toFixed(0)}ms`);
+    const arc   = _pendingArc;
+    const hints = _pendingArcHints;
+    _pendingArc = null; // prevent double-reschedule if canplaythrough fires again
+    _scheduleArcBeats(arc, realMs, hints, 0);
 });
 
 VoiceService.onEnd(() => {
@@ -1057,9 +1315,13 @@ VoiceService.onEnd(() => {
 initSettings();
 loadModels();
 IdlePresence.init(presenceIndicator);
+ProactiveIdle.init(handleIdleMessage);
 AvatarBridge.init();
-// Start in IDLE
+// Start in IDLE — this also kicks off the first silence timer via ProactiveIdle.reset()
 updateUI(STATES.IDLE, null);
+
+// Startup greeting — delayed to let avatar model + memory finish loading
+setTimeout(() => handleStartupGreeting(), 3000);
 
 // Listen for Capabilities
 if (window.electronAPI && window.electronAPI.onAvatarCapabilities) {

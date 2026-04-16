@@ -78,6 +78,88 @@ export function getInputRhythmHint(keyTimestamps) {
 }
 
 /**
+ * Proactive Idle Messenger
+ *
+ * Tracks silence and fires a callback when Miko should initiate contact.
+ * Timer resets after every user interaction or Miko response.
+ *
+ * Thresholds:
+ *   First idle message : ~3 min  (±60s jitter)
+ *   Subsequent messages: ~12 min (±90s jitter)
+ *   Minimum gap        : 60s  (safety floor)
+ */
+export const ProactiveIdle = {
+    _timer: null,
+    _callback: null,
+    _messageCount: 0,
+
+    FIRST_MS:      3  * 60 * 1000,  // 3 min
+    SUBSEQUENT_MS: 12 * 60 * 1000,  // 12 min
+    JITTER_FIRST:  60 * 1000,        // ±60s
+    JITTER_NEXT:   90 * 1000,        // ±90s
+    MIN_MS:        60 * 1000,        // never sooner than 1 min
+
+    /**
+     * Set the callback and start the initial timer.
+     * @param {function({timeOfDay: string, minutesSilent: number, messageCount: number}): void} callback
+     */
+    init(callback) {
+        this._callback = callback;
+        this._messageCount = 0;
+        this._schedule();
+    },
+
+    /**
+     * Reset (restart) the silence timer. Call after every user input or Miko response.
+     */
+    reset() {
+        this._clearTimer();
+        this._schedule();
+    },
+
+    /** Stop permanently (e.g. on app teardown). */
+    stop() {
+        this._clearTimer();
+    },
+
+    _clearTimer() {
+        if (this._timer !== null) {
+            clearTimeout(this._timer);
+            this._timer = null;
+        }
+    },
+
+    _schedule() {
+        const base   = this._messageCount === 0 ? this.FIRST_MS       : this.SUBSEQUENT_MS;
+        const jitter = this._messageCount === 0 ? this.JITTER_FIRST   : this.JITTER_NEXT;
+        // Random offset in [-jitter, +jitter]
+        const offset = (Math.random() * 2 - 1) * jitter;
+        const delay  = Math.max(this.MIN_MS, base + offset);
+
+        console.log(`[IdleTimer] Next idle check in ${Math.round(delay / 1000)}s`);
+        this._timer = setTimeout(() => this._fire(), delay);
+    },
+
+    _fire() {
+        this._timer = null;
+        this._messageCount++;
+        const minutesSilent = this._messageCount === 1
+            ? Math.round(this.FIRST_MS / 60000)
+            : Math.round(this.SUBSEQUENT_MS / 60000);
+
+        if (this._callback) {
+            this._callback({
+                timeOfDay: getTimeOfDayTone(),
+                minutesSilent,
+                messageCount: this._messageCount
+            });
+        }
+        // Schedule the next idle message after this one
+        this._schedule();
+    }
+};
+
+/**
  * Idle presence indicator controller
  */
 export const IdlePresence = {

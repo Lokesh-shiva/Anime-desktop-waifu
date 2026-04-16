@@ -15,6 +15,7 @@ export const VoiceService = {
     // Callbacks
     _onStart: null,
     _onEnd: null,
+    _onDuration: null,
 
     init() {
         // Wire up player -> mouth sync
@@ -25,6 +26,10 @@ export const VoiceService = {
         this.player.onEnd(() => {
             MouthSync.stop();
             if (this._onEnd) this._onEnd();
+        });
+
+        this.player.onDuration((ms) => {
+            if (this._onDuration) this._onDuration(ms);
         });
     },
 
@@ -122,7 +127,8 @@ export const VoiceService = {
      * Set callbacks
      */
     onStart(cb) { this._onStart = cb; },
-    onEnd(cb) { this._onEnd = cb; }
+    onEnd(cb) { this._onEnd = cb; },
+    onDuration(cb) { this._onDuration = cb; }
 };
 
 // Initialize

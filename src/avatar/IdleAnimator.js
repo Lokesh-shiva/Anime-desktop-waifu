@@ -15,7 +15,8 @@ export class IdleAnimator {
             nextBlinkTime: this._randomBlinkInterval(),
             isBlinking: false,
             breathPhase: 0,
-            swayPhase: 0
+            swayPhase: 0,
+            earWavePhase: Math.random() * Math.PI * 2  // random start so ears don't sync with breath
         };
 
         // Output overrides
@@ -57,7 +58,17 @@ export class IdleAnimator {
             state.parameters[PARAM_IDS.BREATH] = breathValue;
         }
 
-        // 2. Head/Body Sway
+        // 2. Ear Wave (VT_ELF Param20 — subtle idle oscillation)
+        if (this.registry.hasParam(PARAM_IDS.ELF_EAR_WAVE)) {
+            // ~0.8 Hz — slower than breath, feels organic and independent
+            this.state.earWavePhase += (dt / 1.25) * Math.PI * 2;
+            if (this.state.earWavePhase > Math.PI * 2) this.state.earWavePhase -= Math.PI * 2;
+            // Map sin to [0, 0.22] — ears only wave up, never invert in idle
+            const earWave = ((Math.sin(this.state.earWavePhase) + 1) / 2) * 0.22 * this.intensityMultiplier;
+            state.parameters[PARAM_IDS.ELF_EAR_WAVE] = earWave;
+        }
+
+        // 3. Head/Body Sway
         if (!this.pauseSway) {
             this.state.swayPhase += (dt / TIMING.IDLE_SWAY_CYCLE) * Math.PI * 2;
             if (this.state.swayPhase > Math.PI * 2) this.state.swayPhase -= Math.PI * 2;

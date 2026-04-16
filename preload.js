@@ -17,5 +17,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAvailableModels: () => ipcRenderer.invoke('get-available-models'),
     changeAvatarModel: (path) => ipcRenderer.invoke('change-avatar-model', path),
     getAvatarModelPath: () => ipcRenderer.invoke('get-avatar-model-path'),
-    onAvatarCapabilities: (callback) => ipcRenderer.on('avatar-capabilities', (_, caps) => callback(caps))
+    onAvatarCapabilities: (callback) => ipcRenderer.on('avatar-capabilities', (_, caps) => callback(caps)),
+
+    // Global hotkey wake event
+    onWakeActivate: (callback) => ipcRenderer.on('wake:activate', () => callback())
 });

@@ -88,9 +88,18 @@ class MemoryManager {
         this.sessionSummary = "";
         this.turnCount = 0;
         this.isAnalyzing = false;
+        this.lastSeen = null;     // Timestamp (ms) of previous session end
 
         // Load persistent memory
         this._load();
+    }
+
+    /**
+     * Get the timestamp (ms) of the last session save, or null if first run.
+     * @returns {number|null}
+     */
+    getLastSeen() {
+        return this.lastSeen;
     }
 
     /**
@@ -104,6 +113,7 @@ class MemoryManager {
                     // Migrate old string-based facts to new structure
                     this.facts = this._migrateFacts(startData.facts || []);
                     this.sessionSummary = startData.sessionSummary || "";
+                    this.lastSeen = startData.lastSeen || null;
 
                     // Apply decay based on time since last use
                     this._applyDecay();
@@ -205,7 +215,8 @@ class MemoryManager {
             if (window.assistant?.memory) {
                 const data = {
                     facts: this.facts,
-                    sessionSummary: this.sessionSummary
+                    sessionSummary: this.sessionSummary,
+                    lastSeen: Date.now()
                 };
                 await window.assistant.memory.save(data);
                 console.log('[Memory] Saved to disk');

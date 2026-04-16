@@ -219,7 +219,8 @@ export class EmotionMapper {
                 [PARAM_IDS.EYE_R_SMILE]: 0,
                 [PARAM_IDS.MOUTH_OPEN_Y]: 0.6,
                 [PARAM_IDS.BROW_L_Y]: 1.0,
-                [PARAM_IDS.BROW_R_Y]: 1.0
+                [PARAM_IDS.BROW_R_Y]: 1.0,
+                [PARAM_IDS.ELF_EAR_WAVE]: 0.65      // VT_ELF: startled ear flick
             },
             'embarrassed': {
                 [PARAM_IDS.EYE_L_SMILE]: 0.6,
@@ -252,7 +253,8 @@ export class EmotionMapper {
                 [PARAM_IDS.ANGLE_Z]: 8,
                 [PARAM_IDS.BODY_ANGLE_Z]: 5,
                 [PARAM_IDS.HAPPY_VIS]: 0.8,         // VT_ELF: sparkle overlay
-                [PARAM_IDS.SKIRT_EXPAND]: 0.5       // VT_ELF: excited skirt puff
+                [PARAM_IDS.SKIRT_EXPAND]: 0.5,      // VT_ELF: excited skirt puff
+                [PARAM_IDS.ELF_EAR_WAVE]: 0.85      // VT_ELF: ears flapping with excitement
             },
             'sleepy': {
                 [PARAM_IDS.EYE_L_OPEN]: 0.2,
@@ -275,7 +277,9 @@ export class EmotionMapper {
                 [PARAM_IDS.BROW_L_Y]: 0.6,
                 [PARAM_IDS.BROW_R_Y]: -0.2,
                 [PARAM_IDS.ANGLE_X]: 5,
-                [PARAM_IDS.ANGLE_Z]: 4
+                [PARAM_IDS.ANGLE_Z]: 4,
+                [PARAM_IDS.TONGUE_VIS]: 0.6,    // VT_ELF: tongue peek — teasing
+                [PARAM_IDS.BERO]: 0.3            // VT_ELF: subtle tongue wave
             },
             'love': {
                 [PARAM_IDS.EYE_L_SMILE]: 1.0,
@@ -497,10 +501,11 @@ export class EmotionMapper {
         // Overlay/visibility params are binary switches — they must reach their
         // full value to trigger the visual effect. Do NOT scale them by intensity.
         const OVERLAY_PARAMS = new Set([
-            PARAM_IDS.HAPPY_VIS,    // Param15   — sparkle effect
-            PARAM_IDS.ANGER_VIS,    // Angervis  — anger effect
-            PARAM_IDS.HATE_VIS,     // ParamHateVis — disgust effect
-            PARAM_IDS.SWEAT_VIS,    // ParamSweatVis — sweat/nervousness drops
+            PARAM_IDS.HAPPY_VIS,    // Param15        — sparkle effect
+            PARAM_IDS.ANGER_VIS,    // Angervis        — anger effect
+            PARAM_IDS.HATE_VIS,     // ParamHateVis    — disgust effect
+            PARAM_IDS.SWEAT_VIS,    // ParamSweatVis   — sweat/nervousness drops
+            PARAM_IDS.TONGUE_VIS,   // Paramtoungevis  — tongue visibility (binary switch)
         ]);
 
         const scaled = {};

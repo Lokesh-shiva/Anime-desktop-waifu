@@ -223,10 +223,33 @@ export class Live2DRenderer {
 
     /**
      * Set behavior flags
-     * @param {object} behaviors 
+     * @param {object} behaviors
      */
     setBehaviors(behaviors) {
         Object.assign(this.behaviors, behaviors);
+    }
+
+    /**
+     * Play a motion by group name and optional index.
+     * Silently does nothing if the model has no motions or the group doesn't exist.
+     * @param {string} group  - Motion group name (e.g. "Idle", "Tap", "Shy")
+     * @param {number} [index] - Index within the group (omit for random)
+     * @returns {Promise<boolean>} - true if motion started, false if unavailable
+     */
+    async playMotion(group, index) {
+        if (!this.model) return false;
+        try {
+            // pixi-live2d-display exposes model.motion(group, index?, priority?)
+            // Returns a Promise<MotionState> that resolves when the motion starts.
+            // Returns null/false if the group doesn't exist.
+            const result = index !== undefined
+                ? await this.model.motion(group, index)
+                : await this.model.motion(group);
+            return !!result;
+        } catch (e) {
+            // Group or motion doesn't exist — fail silently
+            return false;
+        }
     }
 
     /**

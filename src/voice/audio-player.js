@@ -9,6 +9,7 @@ export class AudioPlayer {
         this.isPlayingState = false;
         this.amplitudeCallback = null;
         this.onEndCallback = null;
+        this.durationCallback = null;
         this.animationFrameId = null;
 
         // Playback rate: 1.0 = normal, 0.85 = ~15% slower, 0.75 = noticeably soft/intimate
@@ -66,8 +67,11 @@ export class AudioPlayer {
             };
 
             this.audio.oncanplaythrough = () => {
-                if (this.audio) {
-                    console.log('[AudioPlayer] Audio can play through, duration:', this.audio.duration);
+                if (this.audio && isFinite(this.audio.duration) && this.audio.duration > 0) {
+                    // Actual playback duration accounts for the playback rate (slower = longer)
+                    const realMs = (this.audio.duration / this.playbackRate) * 1000;
+                    console.log(`[AudioPlayer] duration: ${this.audio.duration.toFixed(3)}s → ${realMs.toFixed(0)}ms at rate ${this.playbackRate}`);
+                    if (this.durationCallback) this.durationCallback(realMs);
                 }
             };
 
@@ -172,6 +176,14 @@ export class AudioPlayer {
      */
     onEnd(callback) {
         this.onEndCallback = callback;
+    }
+
+    /**
+     * Set duration callback — fires once when real audio duration is known.
+     * @param {function(number): void} callback - receives actual playback duration in ms
+     */
+    onDuration(callback) {
+        this.durationCallback = callback;
     }
 
     /**

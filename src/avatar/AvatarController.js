@@ -31,6 +31,38 @@ export class AvatarController {
 
         this.activeEmotion = null;
 
+        // Emotion persistence/decay ─────────────────────────────────────────────
+        // After the final arc beat, each emotion lingers for a label-specific
+        // duration before transitioning back to neutral. Heavy emotions linger
+        // longer; high-energy ones snap back quickly.
+        this._decayTimer = null;
+
+        // How long (ms) each emotion holds before fading to neutral.
+        // Emotions not listed use _DEFAULT_DECAY_MS.
+        this._EMOTION_DECAY_MS = {
+            longing:     8000,
+            lonely:      8000,
+            tender:      7000,
+            sad:         7000,
+            melancholic: 7000,
+            calm:        6000,
+            kind:        5000,
+            shy:         4500,
+            grateful:    4500,
+            happy:       4000,
+            curious:     3500,
+            playful:     2500,
+            embarrassed: 3500,
+            flustered:   2500,
+            confused:    3000,
+            anger:       2000,
+            excited:     1500,
+            surprised:   1200,
+            neutral:        0,  // no linger — snap to rest immediately
+        };
+        this._DEFAULT_DECAY_MS = 3000;
+        // ────────────────────────────────────────────────────────────────────────
+
         // Keep a reference to the bound tick function so we can add/remove it cleanly
         this.boundTick = this._onTick.bind(this);
         this.isLooping = false;
@@ -186,6 +218,15 @@ export class AvatarController {
 
         this.intentMapper.setAIState(state);
 
+        if (state === 'THINKING') {
+            // Cancel any pending decay — a new response is incoming and will set
+            // its own emotion, so we don't want neutral to fire mid-flight.
+            if (this._decayTimer) {
+                clearTimeout(this._decayTimer);
+                this._decayTimer = null;
+            }
+        }
+
         if (state !== 'RESPONDING') {
             this.mouthSync.stop();
         }
@@ -241,6 +282,14 @@ export class AvatarController {
                 this._startTransition(paramPreset);
             }
 
+            // Schedule automatic return to neutral after the emotion-specific linger time.
+            // Each arc beat resets the timer, so decay only fires after the final beat.
+            this._scheduleDecay(label);
+
+            // Play a matching motion if the model has one for this emotion.
+            // Fire-and-forget — fails silently when no motions exist (e.g. VT_ELF).
+            this._tryPlayMotion(label);
+
             // Also try expression file as optional bonus
             if (result.type === 'expression' && this.renderer.model) {
                 console.log('[AvatarController] Also trying file expression:', result.name);
@@ -293,6 +342,77 @@ export class AvatarController {
         }
 
         return overlay;
+    }
+
+    /**
+     * Emotion → motion group priority list.
+     * Each entry is an array of group names tried in order — first one present in the
+     * loaded model wins. All names are case-sensitive as authored in the model3.json.
+     * Falls back silently when none of the groups exist (e.g. VT_ELF).
+     */
+    static get EMOTION_MOTION_MAP() {
+        return {
+            shy:         ['Shy', 'Hesitate', 'LookDown', 'Look_Down'],
+            embarrassed: ['Shy', 'Embarrassed', 'Hesitate'],
+            hesitant:    ['Hesitate', 'Shy', 'LookDown'],
+            sad:         ['Sad', 'Cry', 'Sorrow'],
+            lonely:      ['Sad', 'Sorrow'],
+            longing:     ['Sad', 'LookDown', 'Sorrow'],
+            happy:       ['Happy', 'Cheer', 'Excited', 'Joy'],
+            excited:     ['Excited', 'Cheer', 'Happy'],
+            playful:     ['Playful', 'Tease', 'Happy'],
+            surprised:   ['Surprised', 'Shock', 'Surprise'],
+            grateful:    ['Happy', 'Cheer', 'Bow'],
+            kind:        ['Happy', 'Gentle', 'Bow'],
+            tender:      ['Gentle', 'Happy', 'Bow'],
+            anger:       ['Angry', 'Anger', 'Stamp'],
+            disgusted:   ['Angry', 'Disgust'],
+            curious:     ['Think', 'Curious', 'LookAround'],
+            // Generic fallbacks for models with simple group names
+            neutral:     ['Idle', 'Neutral'],
+        };
+    }
+
+    /**
+     * Try to play a motion that matches the given emotion label.
+     * Checks the model's discovered motion groups and plays the first match.
+     * No-ops silently when the model has no motions or no matching group.
+     * @param {string} label - Emotion label
+     */
+    async _tryPlayMotion(label) {
+        const motionGroups = this.registry.getCapabilities().motionGroups;
+        if (!motionGroups || Object.keys(motionGroups).length === 0) return;
+
+        const candidates = AvatarController.EMOTION_MOTION_MAP[label] || [];
+        for (const groupName of candidates) {
+            if (motionGroups[groupName]) {
+                console.log(`[AvatarController] Playing motion: ${groupName} for emotion: ${label}`);
+                await this.renderer.playMotion(groupName);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Schedule an automatic return to neutral after the emotion-specific linger time.
+     * Cancels any previously scheduled decay so only the most recent emotion's
+     * timer is active — arc beats naturally reset it as they fire.
+     * @param {string} label - Emotion label just applied
+     */
+    _scheduleDecay(label) {
+        if (this._decayTimer) {
+            clearTimeout(this._decayTimer);
+            this._decayTimer = null;
+        }
+
+        const delayMs = this._EMOTION_DECAY_MS[label] ?? this._DEFAULT_DECAY_MS;
+        if (delayMs <= 0) return; // neutral — no hold needed
+
+        this._decayTimer = setTimeout(() => {
+            this._decayTimer = null;
+            console.log(`[AvatarController] Emotion decay: ${label} held ${delayMs}ms → returning to neutral`);
+            this._startTransition({});
+        }, delayMs);
     }
 
     /**

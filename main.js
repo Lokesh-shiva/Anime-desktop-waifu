@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -98,6 +98,23 @@ function closeAvatarWindow() {
 app.whenReady().then(() => {
     createWindow();
     startTTSServer();
+
+    // Global hotkey — Ctrl+Alt+A — activate PTT from anywhere
+    const hotkeyRegistered = globalShortcut.register('Control+Alt+A', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('wake:activate');
+        }
+    });
+
+    if (!hotkeyRegistered) {
+        console.warn('[Main] Failed to register global hotkey Control+Alt+A — may be in use by another app');
+    } else {
+        console.log('[Main] Global hotkey Control+Alt+A registered');
+    }
+});
+
+app.on('will-quit', () => {
+    globalShortcut.unregisterAll();
 });
 
 /**

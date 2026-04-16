@@ -22,7 +22,9 @@ export class CapabilityRegistry {
             hasBrowAngle: false,
             hasEyeSmile: false,
             // Expressions
-            expressions: []
+            expressions: [],
+            // Motions: { groupName: count } — empty when model has no motion files
+            motionGroups: {}
         };
         this.availableParams = new Set();
     }
@@ -92,6 +94,22 @@ export class CapabilityRegistry {
                 console.log('[CapabilityRegistry] Discovered expressions (from settings):', this.capabilities.expressions.join(', '));
             } catch (e) {
                 console.warn('[CapabilityRegistry] Expression discovery failed:', e.message);
+            }
+        }
+
+        // Discover Motions
+        const motions = model.internalModel?.settings?.motions;
+        if (motions && typeof motions === 'object') {
+            for (const [group, list] of Object.entries(motions)) {
+                if (Array.isArray(list) && list.length > 0) {
+                    this.capabilities.motionGroups[group] = list.length;
+                }
+            }
+            const groupNames = Object.keys(this.capabilities.motionGroups);
+            if (groupNames.length > 0) {
+                console.log('[CapabilityRegistry] Motion groups:', groupNames.map(g => `${g}(${this.capabilities.motionGroups[g]})`).join(', '));
+            } else {
+                console.log('[CapabilityRegistry] No motion groups found in this model');
             }
         }
 
@@ -216,7 +234,8 @@ export class CapabilityRegistry {
             hasCheek: false,
             hasBrowAngle: false,
             hasEyeSmile: false,
-            expressions: []
+            expressions: [],
+            motionGroups: {}
         };
         this.availableParams.clear();
     }
