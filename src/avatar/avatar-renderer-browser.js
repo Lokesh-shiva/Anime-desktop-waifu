@@ -449,8 +449,100 @@ function handleMouseMove(e) {
 }
 
 // ================================
-// Boop Interaction
+// Click / Boop Reactions
 // ================================
+
+// Region layout (normalized Y from top):
+//   head:  0.00 – 0.38
+//   body:  0.38 – 0.72
+//   skirt: 0.72 – 1.00
+//
+// Each reaction: { label, intensity, actionHints }
+// A reaction may define an optional `followUp` for a two-beat mini-arc.
+const CLICK_REACTIONS = {
+    head: [
+        { label: 'embarrassed', intensity: 0.88, actionHints: { embarrassed: true } },
+        { label: 'shy',         intensity: 0.82, actionHints: { shy: true } },
+        { label: 'flustered',   intensity: 0.85, actionHints: { flustered: true } },
+        { label: 'surprised',   intensity: 0.90, actionHints: {} },
+    ],
+    body: [
+        { label: 'surprised',   intensity: 0.85, actionHints: {},               followUp: { label: 'flustered', intensity: 0.75, actionHints: { flustered: true } } },
+        { label: 'flustered',   intensity: 0.80, actionHints: { flustered: true } },
+        { label: 'playful',     intensity: 0.78, actionHints: {} },
+        { label: 'shy',         intensity: 0.75, actionHints: { shy: true } },
+    ],
+    skirt: [
+        { label: 'embarrassed', intensity: 0.92, actionHints: { embarrassed: true } },
+        { label: 'surprised',   intensity: 0.88, actionHints: {},               followUp: { label: 'embarrassed', intensity: 0.80, actionHints: { embarrassed: true } } },
+        { label: 'flustered',   intensity: 0.90, actionHints: { flustered: true } },
+    ],
+};
+
+function _pickReaction(region) {
+    const pool = CLICK_REACTIONS[region];
+    return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function handleAvatarClick(normX, normY) {
+    if (!avatarController || !model) return;
+
+    // Ignore if currently thinking/responding — Miko is busy
+    const aiState = avatarController.intentMapper?.aiState;
+    if (aiState === 'THINKING' || aiState === 'RESPONDING') return;
+
+    // Determine region
+    let region = 'body';
+    if (normY < 0.38)      region = 'head';
+    else if (normY > 0.72) region = 'skirt';
+
+    const reaction = _pickReaction(region);
+    console.log(`[Avatar] Click on ${region} → ${reaction.label} @ ${reaction.intensity}`);
+
+    // Fire first beat immediately
+    avatarController.handleComplexIntent({
+        emotion: { label: reaction.label, intensity: reaction.intensity },
+        actionHints: reaction.actionHints
+    });
+
+    // Optional follow-up beat after 900ms (simulates a two-beat reaction arc)
+    if (reaction.followUp) {
+        setTimeout(() => {
+            if (avatarController) {
+                avatarController.handleComplexIntent({
+                    emotion: { label: reaction.followUp.label, intensity: reaction.followUp.intensity },
+                    actionHints: reaction.followUp.actionHints
+                });
+            }
+        }, 900);
+    }
+}
+
+// Wire click — skip if it was a drag
+document.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    if (dragState.enabled) return;
+    // Record position at mousedown to detect movement
+    dragState._clickX = e.clientX;
+    dragState._clickY = e.clientY;
+});
+
+document.addEventListener('click', (e) => {
+    // Skip menu/UI clicks
+    if (e.target.closest('#ui-layer')) return;
+    // Skip if drag moved significantly
+    const dx = e.clientX - (dragState._clickX ?? e.clientX);
+    const dy = e.clientY - (dragState._clickY ?? e.clientY);
+    if (Math.sqrt(dx * dx + dy * dy) > 6) return;
+
+    const container = document.getElementById('avatar-container');
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const normX = (e.clientX - rect.left) / rect.width;
+    const normY = (e.clientY - rect.top) / rect.height;
+
+    handleAvatarClick(normX, normY);
+});
 
 // Setup IPC listeners
 if (window.avatarAPI) {
