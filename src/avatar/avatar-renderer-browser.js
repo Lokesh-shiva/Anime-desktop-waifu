@@ -518,21 +518,26 @@ function handleAvatarClick(normX, normY) {
     }
 }
 
-// Wire click — skip if it was a drag
-document.addEventListener('mousedown', (e) => {
+// Boop detection via pointerdown/pointerup — avoids PIXI's click-swallow issue.
+// pointerdown records position; pointerup fires reaction if movement < 6px.
+let _boopStart = null;
+
+document.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
-    if (dragState.enabled) return;
-    // Record position at mousedown to detect movement
-    dragState._clickX = e.clientX;
-    dragState._clickY = e.clientY;
+    if (e.target.closest('#ui-layer')) return;
+    _boopStart = { x: e.clientX, y: e.clientY };
 });
 
-document.addEventListener('click', (e) => {
-    // Skip menu/UI clicks
-    if (e.target.closest('#ui-layer')) return;
-    // Skip if drag moved significantly
-    const dx = e.clientX - (dragState._clickX ?? e.clientX);
-    const dy = e.clientY - (dragState._clickY ?? e.clientY);
+document.addEventListener('pointerup', (e) => {
+    if (e.button !== 0) return;
+    if (e.target.closest('#ui-layer')) { _boopStart = null; return; }
+    if (!_boopStart) return;
+
+    const dx = e.clientX - _boopStart.x;
+    const dy = e.clientY - _boopStart.y;
+    _boopStart = null;
+
+    // If moved more than 6px it was a drag, not a click
     if (Math.sqrt(dx * dx + dy * dy) > 6) return;
 
     const container = document.getElementById('avatar-container');
