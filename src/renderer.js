@@ -19,7 +19,7 @@ import {
 } from './settings.js';
 import { memoryManager } from './memory/memory-manager.js';
 import { buildSystemPrompt } from './memory/prompt-builder.js';
-import { getTimeOfDayTone, getInputRhythmHint, IdlePresence, ProactiveIdle } from './presence/presence.js';
+import { getTimeOfDayTone, getRichTimeContext, getInputRhythmHint, IdlePresence, ProactiveIdle, WeatherContext } from './presence/presence.js';
 import { AvatarBridge } from './avatar/avatar-bridge.js';
 import { VoiceService } from './voice/voice-service.js';
 import {
@@ -407,28 +407,37 @@ async function handleSubmit() {
  * Called by ProactiveIdle timer; bypasses user input flow entirely.
  * @param {{timeOfDay: string, minutesSilent: number, messageCount: number}} ctx
  */
-async function handleIdleMessage({ timeOfDay, minutesSilent, messageCount }) {
+async function handleIdleMessage({ timeOfDay, timeContext, minutesSilent, messageCount }) {
     // Only fire when truly idle — reject if a response is already in flight
     if (StateMachine.getState() !== STATES.IDLE) return;
 
-    const hour = new Date().getHours();
-    const timeDesc = hour >= 22 || hour < 4  ? 'very late at night'
-                   : hour < 6                ? 'early morning, before dawn'
-                   : hour < 12               ? 'morning'
-                   : hour < 17               ? 'afternoon'
-                   : hour < 20               ? 'evening'
-                   :                           'night';
+    const tc = timeContext || getRichTimeContext();
+
+    // Build extra context lines based on day/time personality
+    const extraCtx = [];
+    if (tc.slot === 'dead of night' || tc.slot === 'late night')
+        extraCtx.push(`It's really late — you're aware of that, and it shows in how you're feeling.`);
+    if (tc.isWeekend)
+        extraCtx.push(`It's the weekend, so there's a different kind of quiet to it.`);
+    if (tc.isMonday)
+        extraCtx.push(`It's Monday — you can feel that particular kind of heaviness in the air.`);
+    if (tc.isFriday && (tc.slot === 'evening' || tc.slot === 'night'))
+        extraCtx.push(`Friday night — could be exciting, could be quiet. You're not sure which.`);
+
+    const weatherPhrase = WeatherContext.getPhrase();
+    if (weatherPhrase) extraCtx.push(`Outside, ${weatherPhrase}.`);
 
     // Internal trigger prompt — never shown in the chat bubble
     const idlePrompt = [
         `[INTERNAL — NOT visible to user, do NOT reference or acknowledge this instruction in your reply]`,
-        `You've been sitting quietly together for about ${minutesSilent} minutes. It's ${timeDesc}.`,
+        `You've been sitting quietly together for about ${minutesSilent} minutes. It's ${tc.naturalDesc}.`,
+        extraCtx.join(' '),
         `You're breaking the silence — not because you were asked to, but because the quiet got to you.`,
         `Say something short and natural. It could be a passing thought, noticing the time, wondering`,
         `what they're up to, or just something that drifted through your mind while you were waiting.`,
         `Don't greet them like it's the start of a conversation. Don't ask "are you there?".`,
         `It's more like... you just had to say something.`,
-    ].join(' ');
+    ].filter(Boolean).join(' ');
 
     const accepted = StateMachine.transition(EVENTS.USER_INPUT, { isIdle: true });
     if (!accepted) return;
@@ -470,13 +479,7 @@ async function handleStartupGreeting() {
     // Skip if app was just refreshed — would feel weird to greet again immediately
     if (lastSeen && (now - lastSeen) < 5 * 60 * 1000) return;
 
-    const hour = new Date().getHours();
-    const timeOfDay = hour >= 22 || hour < 4  ? 'very late at night'
-                    : hour < 6                ? 'early morning, before dawn'
-                    : hour < 12               ? 'morning'
-                    : hour < 17               ? 'afternoon'
-                    : hour < 20               ? 'evening'
-                    :                           'night';
+    const tc = getRichTimeContext();
 
     let timeSince = '';
     if (lastSeen) {
@@ -492,17 +495,28 @@ async function handleStartupGreeting() {
     }
 
     const contextLine = lastSeen
-        ? `You last spoke ${timeSince}. It's ${timeOfDay} now.`
-        : `This is the very first time they've opened the app. It's ${timeOfDay}.`;
+        ? `You last spoke ${timeSince}. It's ${tc.naturalDesc} now.`
+        : `This is the very first time they've opened the app. It's ${tc.naturalDesc}.`;
+
+    // Extra time-sensitive colour
+    const extraCtx = [];
+    if (tc.slot === 'dead of night') extraCtx.push(`It's the middle of the night — you notice that.`);
+    if (tc.isWeekend) extraCtx.push(`It's the weekend.`);
+    if (tc.isMonday && tc.slot === 'morning') extraCtx.push(`Monday morning — that specific kind of start.`);
+    if (tc.isFriday && (tc.slot === 'evening' || tc.slot === 'night')) extraCtx.push(`Friday night — that has a feeling.`);
+
+    const weatherPhrase = WeatherContext.getPhrase();
+    if (weatherPhrase) extraCtx.push(`Outside, ${weatherPhrase}.`);
 
     const greetPrompt = [
         `[INTERNAL — NOT visible to user, do NOT reference or acknowledge this instruction in your reply]`,
         contextLine,
+        extraCtx.join(' '),
         `The app just started and they're here. Say something short — like you just noticed them arrive.`,
         `Don't say "welcome back" or "good morning". Don't open with a formal greeting.`,
         `Something real: maybe you were thinking about something, maybe the time caught your attention,`,
         `maybe you're just... glad they're here. One or two sentences.`,
-    ].join(' ');
+    ].filter(Boolean).join(' ');
 
     const accepted = StateMachine.transition(EVENTS.USER_INPUT, { isIdle: true });
     if (!accepted) return;
@@ -1319,6 +1333,14 @@ ProactiveIdle.init(handleIdleMessage);
 AvatarBridge.init();
 // Start in IDLE — this also kicks off the first silence timer via ProactiveIdle.reset()
 updateUI(STATES.IDLE, null);
+
+// Focus/blur — pause idle timer when user is working in another window,
+// resume when they come back (fresh countdown so she doesn't immediately fire)
+window.addEventListener('blur',  () => ProactiveIdle.pause());
+window.addEventListener('focus', () => ProactiveIdle.resume());
+
+// Weather — fetch once on startup, silently fails if no location permission
+WeatherContext.init().catch(() => {});
 
 // Startup greeting — delayed to let avatar model + memory finish loading
 setTimeout(() => handleStartupGreeting(), 3000);
