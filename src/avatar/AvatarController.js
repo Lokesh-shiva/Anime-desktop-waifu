@@ -65,6 +65,19 @@ export class AvatarController {
         this._DEFAULT_DECAY_MS = 3000;
         // ────────────────────────────────────────────────────────────────────────
 
+        // Persistent mood baseline ───────────────────────────────────────────────
+        // Each emotion beat nudges the baseline via EMA. After emotion decay,
+        // instead of returning to pure neutral, the baseline applies as a subtle
+        // residual mood (gaze + blink only — no face param override).
+        // Baseline fades to neutral after 20min of no new emotion beats.
+        this._moodBaseline = { label: null, intensity: 0 };
+        this._baselineFadeTimer = null;
+        this._BASELINE_FADE_MS = 20 * 60 * 1000; // 20 minutes
+        this._BASELINE_EMA = 0.3;                 // weight of new beat vs existing baseline
+        this._BASELINE_CAP = 0.70;                // baseline never exceeds this intensity
+        this._BASELINE_MIN = 0.15;                // below this → treat as neutral
+        // ────────────────────────────────────────────────────────────────────────
+
         // Keep a reference to the bound tick function so we can add/remove it cleanly
         this.boundTick = this._onTick.bind(this);
         this.isLooping = false;
@@ -289,6 +302,9 @@ export class AvatarController {
             this.idleAnimator.setBlinkProfile(label);
             this.gazeAnimator.setEmotion(label, intensity);
 
+            // Update persistent mood baseline — dominant emotions accumulate across messages
+            this._updateBaseline(label, intensity);
+
             // Schedule automatic return to neutral after the emotion-specific linger time.
             // Each arc beat resets the timer, so decay only fires after the final beat.
             this._scheduleDecay(label);
@@ -416,11 +432,74 @@ export class AvatarController {
 
         this._decayTimer = setTimeout(() => {
             this._decayTimer = null;
-            console.log(`[AvatarController] Emotion decay: ${label} held ${delayMs}ms → returning to neutral`);
+            console.log(`[AvatarController] Emotion decay: ${label} held ${delayMs}ms → applying baseline`);
+            this._applyBaseline();
+        }, delayMs);
+    }
+
+    /**
+     * Update persistent mood baseline via exponential moving average.
+     * Called on every arc beat — dominant emotions accumulate over time.
+     * @param {string} label
+     * @param {number} intensity
+     */
+    _updateBaseline(label, intensity) {
+        // Neutral never shifts the baseline — it's a reset signal, not a mood
+        if (!label || label === 'neutral') return;
+
+        const prev = this._moodBaseline;
+
+        // If same label, blend intensity up. If different label, blend toward new one
+        // by treating the intensity difference as the EMA signal.
+        if (prev.label === label) {
+            const blended = prev.intensity + this._BASELINE_EMA * (intensity - prev.intensity);
+            this._moodBaseline = { label, intensity: Math.min(this._BASELINE_CAP, blended) };
+        } else {
+            // New emotion — compare weights: if incoming intensity is stronger than
+            // current baseline, shift toward it; otherwise nudge only slightly.
+            const incomingWeight = intensity * this._BASELINE_EMA;
+            const existingWeight = prev.intensity * (1 - this._BASELINE_EMA);
+            if (incomingWeight > existingWeight || prev.intensity < this._BASELINE_MIN) {
+                this._moodBaseline = {
+                    label,
+                    intensity: Math.min(this._BASELINE_CAP, incomingWeight + existingWeight)
+                };
+            }
+            // else: current baseline stays dominant, just gets slightly blended down
+        }
+
+        // Reset the 20-min fade timer on every beat
+        if (this._baselineFadeTimer) clearTimeout(this._baselineFadeTimer);
+        this._baselineFadeTimer = setTimeout(() => {
+            console.log('[AvatarController] Mood baseline faded to neutral after inactivity');
+            this._moodBaseline = { label: null, intensity: 0 };
+            this._baselineFadeTimer = null;
+        }, this._BASELINE_FADE_MS);
+
+        console.log(`[AvatarController] Mood baseline: ${this._moodBaseline.label} @ ${this._moodBaseline.intensity.toFixed(2)}`);
+    }
+
+    /**
+     * Apply the mood baseline as a subtle residual state after emotion decay.
+     * Only drives blink rhythm and gaze — no face param overrides.
+     */
+    _applyBaseline() {
+        const { label, intensity } = this._moodBaseline;
+
+        if (!label || intensity < this._BASELINE_MIN) {
+            // True neutral — everything resets
             this.idleAnimator.setBlinkProfile(null);
             this.gazeAnimator.setEmotion(null);
             this._startTransition({});
-        }, delayMs);
+            return;
+        }
+
+        // Subtle residual: gaze and blink at reduced intensity, no face params
+        const residualIntensity = intensity * 0.35;
+        console.log(`[AvatarController] Returning to baseline: ${label} @ ${residualIntensity.toFixed(2)} (residual)`);
+        this.idleAnimator.setBlinkProfile(label);
+        this.gazeAnimator.setEmotion(label, residualIntensity);
+        this._startTransition({}); // clear face params — face goes neutral
     }
 
     /**
