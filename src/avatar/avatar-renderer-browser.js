@@ -487,9 +487,11 @@ function _pickReaction(region) {
 function handleAvatarClick(normX, normY) {
     if (!avatarController || !model) return;
 
-    // Ignore if currently thinking/responding — Miko is busy
+    // Ignore only if explicitly mid-response — undefined/IDLE both allow boops
     const aiState = avatarController.intentMapper?.aiState;
     if (aiState === 'THINKING' || aiState === 'RESPONDING') return;
+    // Also block if currently in a decay transition that came from a conversation beat
+    // (don't block — boop should always interrupt idle state)
 
     // Determine region
     let region = 'body';
@@ -522,15 +524,16 @@ function handleAvatarClick(normX, normY) {
 // pointerdown records position; pointerup fires reaction if movement < 6px.
 let _boopStart = null;
 
+// Use capture:true — fires before PIXI 7's EventSystem can stopPropagation on the canvas
 document.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
-    if (e.target.closest('#ui-layer')) return;
+    if (e.target.closest?.('#ui-layer')) return;
     _boopStart = { x: e.clientX, y: e.clientY };
-});
+}, { capture: true });
 
 document.addEventListener('pointerup', (e) => {
     if (e.button !== 0) return;
-    if (e.target.closest('#ui-layer')) { _boopStart = null; return; }
+    if (e.target.closest?.('#ui-layer')) { _boopStart = null; return; }
     if (!_boopStart) return;
 
     const dx = e.clientX - _boopStart.x;
@@ -547,7 +550,7 @@ document.addEventListener('pointerup', (e) => {
     const normY = (e.clientY - rect.top) / rect.height;
 
     handleAvatarClick(normX, normY);
-});
+}, { capture: true });
 
 // Setup IPC listeners
 if (window.avatarAPI) {
