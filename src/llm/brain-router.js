@@ -152,7 +152,9 @@ export const BrainRouter = {
                 .map(e => ({
                     label: e.label.toLowerCase(),
                     intensity: typeof e.intensity === 'number' ? Math.min(1, Math.max(0, e.intensity)) : 0.7,
-                    at: typeof e.at === 'number' ? Math.min(1, Math.max(0, e.at)) : 0
+                    // Clamp at to 0–0.88: beats at 1.0 fire after audio ends (our
+                    // duration estimate always slightly exceeds real audio length)
+                    at: typeof e.at === 'number' ? Math.min(0.88, Math.max(0, e.at)) : 0
                 }))
                 .sort((a, b) => a.at - b.at);
             if (emotionArc.length === 0) emotionArc = null;

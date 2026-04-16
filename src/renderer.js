@@ -74,9 +74,10 @@ function playEmotionArc(arc, text, actionHints = {}) {
         return;
     }
 
-    // ~130 wpm → ~462 ms/word; floor at 1500 ms so short replies still animate
+    // ElevenLabs runs ~170 wpm → ~350 ms/word (measured from real audio logs).
+    // Floor at 1500 ms so single-sentence replies still get a full transition.
     const wordCount = (text || '').split(/\s+/).filter(Boolean).length;
-    const estimatedDurationMs = Math.max(1500, wordCount * 462);
+    const estimatedDurationMs = Math.max(1500, wordCount * 350);
 
     console.log(`[Arc] Playing ${arc.length} beats over ${estimatedDurationMs}ms (${wordCount} words), avatar enabled: ${AvatarBridge.isEnabled()}`);
 
