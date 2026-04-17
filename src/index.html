@@ -262,24 +262,6 @@
   </div><!-- /settings-panel -->
 
 
-  <!-- Tab switching (runs before renderer module) -->
-  <script>
-    (function () {
-      const tabBtns = document.querySelectorAll('.tab-btn');
-      const tabPanes = document.querySelectorAll('.tab-pane');
-
-      tabBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-          tabBtns.forEach(b => b.classList.remove('active'));
-          tabPanes.forEach(p => p.classList.remove('active'));
-          btn.classList.add('active');
-          const target = document.getElementById(btn.dataset.tab);
-          if (target) target.classList.add('active');
-        });
-      });
-    })();
-  </script>
-
   <script type="module" src="renderer.js"></script>
 </body>
 

@@ -815,6 +815,23 @@ if (quitBtn) {
     quitBtn.addEventListener('click', () => window.electronAPI?.quitApp());
 }
 
+// Settings tab switching — must live here (renderer module) so it runs after
+// all DOM manipulations in initSettings() and doesn't race with deferred load.
+{
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabPanes = document.querySelectorAll('.tab-pane');
+
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            tabPanes.forEach(p => p.classList.remove('active'));
+            btn.classList.add('active');
+            const target = document.getElementById(btn.dataset.tab);
+            if (target) target.classList.add('active');
+        });
+    });
+}
+
 // Close settings when clicking outside (harmless no-op when drawer is full-screen overlay)
 document.addEventListener('click', (e) => {
     if (!settingsPanel.contains(e.target) && !settingsBtn.contains(e.target)) {
