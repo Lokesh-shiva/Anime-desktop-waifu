@@ -20,5 +20,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onAvatarCapabilities: (callback) => ipcRenderer.on('avatar-capabilities', (_, caps) => callback(caps)),
 
     // Global hotkey wake event
-    onWakeActivate: (callback) => ipcRenderer.on('wake:activate', () => callback())
+    onWakeActivate: (callback) => ipcRenderer.on('wake:activate', () => callback()),
+
+    // Quit the app from renderer
+    quitApp: () => ipcRenderer.send('quit-app')
 });

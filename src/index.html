@@ -11,160 +11,42 @@
 </head>
 
 <body>
-  <div class="container">
-    <!-- Header with state indicator and settings -->
+
+  <!-- ═══════════════════════════════════════════════
+       CHAT VIEW
+  ════════════════════════════════════════════════ -->
+  <div class="chat-view">
+
+    <!-- Header -->
     <div class="header">
-      <div id="state-indicator" class="indicator idle"></div>
-      <span id="state-label">Ready</span>
-      <span id="presence-indicator" class="presence-idle"></span>
-      <button id="settings-btn" class="settings-btn" title="Settings">⚙️</button>
-    </div>
-
-    <!-- Settings panel (hidden by default) -->
-    <div id="settings-panel" class="settings-panel hidden">
-      <div class="settings-group">
-        <label class="settings-label">Model</label>
-        <div class="radio-group">
-          <label class="radio-option">
-            <input type="radio" name="model-mode" value="local_only">
-            <span>Local Only</span>
-          </label>
-          <label class="radio-option">
-            <input type="radio" name="model-mode" value="cloud_preferred">
-            <span>Cloud (fallback)</span>
-          </label>
-          <label class="radio-option">
-            <input type="radio" name="model-mode" value="cloud_only">
-            <span>Cloud Only</span>
-          </label>
-        </div>
+      <div class="status-cluster">
+        <div id="state-indicator" class="indicator idle"></div>
+        <span id="state-label">Ready</span>
+        <span id="presence-indicator" class="presence-idle"></span>
       </div>
-      <div id="cloud-provider-group" class="settings-group hidden">
-        <label class="settings-label">Cloud Provider</label>
-        <div class="radio-group">
-          <label class="radio-option">
-            <input type="radio" name="cloud-provider" value="gemini" checked>
-            <span>Google Gemini</span>
-          </label>
-          <label class="radio-option">
-            <input type="radio" name="cloud-provider" value="openrouter">
-            <span>OpenRouter</span>
-          </label>
-        </div>
-      </div>
-
-      <div id="api-key-group" class="settings-group hidden">
-        <label class="settings-label" for="api-key-input">Gemini API Key</label>
-        <input type="password" id="api-key-input" placeholder="Enter Gemini API key" autocomplete="off">
-      </div>
-
-      <div id="openrouter-key-group" class="settings-group hidden">
-        <label class="settings-label" for="openrouter-key-input">OpenRouter API Key</label>
-        <input type="password" id="openrouter-key-input" placeholder="Enter OpenRouter API key" autocomplete="off">
-      </div>
-
-      <!-- Avatar Model Selection -->
-      <div class="settings-group">
-        <label class="settings-label" for="model-select">Avatar Model</label>
-        <select id="model-select" class="settings-select">
-          <option value="" disabled selected>Loading...</option>
-        </select>
-        <div id="model-capabilities" class="capabilities-container hidden">
-          <!-- Badges injected here -->
-        </div>
-      </div>
-
-      <div class="settings-group">
-        <label class="checkbox-option">
-          <input type="checkbox" id="avatar-toggle">
-          <span>Show Live2D Avatar</span>
-        </label>
-      </div>
-
-      <!-- Voice Settings -->
-      <div class="settings-group">
-        <label class="checkbox-option">
-          <input type="checkbox" id="voice-toggle">
-          <span>Voice Enabled</span>
-        </label>
-      </div>
-
-      <div id="voice-settings-group" class="settings-group hidden">
-        <label class="settings-label">TTS Engine</label>
-        <div class="radio-group">
-          <label class="radio-option">
-            <input type="radio" name="tts-engine" value="system" checked>
-            <span>System</span>
-          </label>
-          <label class="radio-option">
-            <input type="radio" name="tts-engine" value="styletts2">
-            <span>Neural (Exp)</span>
-          </label>
-          <label class="radio-option">
-            <input type="radio" name="tts-engine" value="elevenlabs">
-            <span>ElevenLabs</span>
-          </label>
-        </div>
-      </div>
-
-      <div id="elevenlabs-settings-group" class="settings-group hidden">
-        <label class="settings-label" for="elevenlabs-key-input">ElevenLabs API Key</label>
-        <input type="password" id="elevenlabs-key-input" placeholder="Paste your ElevenLabs API key"
-          autocomplete="off">
-        <label class="settings-label" for="elevenlabs-voice-select" style="margin-top: 8px;">Voice</label>
-        <select id="elevenlabs-voice-select" class="settings-select"></select>
-        <button id="elevenlabs-test-btn" class="action-btn"
-          style="margin-top: 8px; padding: 6px 10px; font-size: 12px;">
-          Test ElevenLabs
+      <div class="header-actions">
+        <button id="settings-btn" class="icon-btn" title="Settings">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33
+              1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06
+              a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09
+              A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06
+              A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51
+              1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9
+              a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
         </button>
-        <div id="elevenlabs-test-status" style="margin-top: 6px; font-size: 11px; color: #ccc;"></div>
-      </div>
-
-      <!-- Speech-to-Text (Groq Whisper) -->
-      <div class="settings-group" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 4px;">
-        <label class="settings-label" for="groq-stt-key-input">🎤 Speech-to-Text (Groq Whisper)</label>
-        <input type="password" id="groq-stt-key-input" placeholder="Groq API key — free at console.groq.com" autocomplete="off">
-        <div style="margin-top: 4px; font-size: 10px; color: #6b7280;">Hold mic button or Space to talk</div>
-      </div>
-
-      <!-- TEMPORARY: Debug Emotion Triggers -->
-      <div class="settings-group"
-        style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 10px;">
-        <label class="settings-label">Debug Exps (Testing Only)</label>
-        <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px;">
-          <button id="btn-dbg-happy" class="action-btn" style="padding: 4px 8px; font-size: 11px;">Happy</button>
-          <button id="btn-dbg-sad" class="action-btn" style="padding: 4px 8px; font-size: 11px;">Sad</button>
-          <button id="btn-dbg-crying" class="action-btn" style="padding: 4px 8px; font-size: 11px;">Crying</button>
-          <button id="btn-dbg-angry" class="action-btn" style="padding: 4px 8px; font-size: 11px;">Angry</button>
-          <button id="btn-dbg-dark" class="action-btn" style="padding: 4px 8px; font-size: 11px;">Dark</button>
-          <button id="btn-dbg-playful" class="action-btn" style="padding: 4px 8px; font-size: 11px;">Playful</button>
-          <button id="btn-dbg-surprised" class="action-btn"
-            style="padding: 4px 8px; font-size: 11px;">Surprised</button>
-          <button id="btn-dbg-embarrassed" class="action-btn"
-            style="padding: 4px 8px; font-size: 11px;">Embarrassed</button>
-          <button id="btn-dbg-excited" class="action-btn" style="padding: 4px 8px; font-size: 11px;">Excited</button>
-          <button id="btn-dbg-sleepy" class="action-btn" style="padding: 4px 8px; font-size: 11px;">Sleepy</button>
-          <button id="btn-dbg-smug" class="action-btn" style="padding: 4px 8px; font-size: 11px;">Smug</button>
-          <button id="btn-dbg-love" class="action-btn" style="padding: 4px 8px; font-size: 11px;">Love</button>
-          <button id="btn-dbg-confused" class="action-btn" style="padding: 4px 8px; font-size: 11px;">Confused</button>
-          <button id="btn-dbg-scared" class="action-btn" style="padding: 4px 8px; font-size: 11px;">Scared</button>
-          <button id="btn-dbg-disgusted" class="action-btn"
-            style="padding: 4px 8px; font-size: 11px;">Disgusted</button>
-          <button id="btn-dbg-determined" class="action-btn"
-            style="padding: 4px 8px; font-size: 11px;">Determined</button>
-          <button id="btn-dbg-curious" class="action-btn" style="padding: 4px 8px; font-size: 11px;">Curious</button>
-          <button id="btn-dbg-neutral" class="action-btn"
-            style="padding: 4px 8px; font-size: 11px; background: rgba(255,255,255,0.15);">⟲ Neutral</button>
-        </div>
       </div>
     </div>
 
-    <!-- Response area -->
+    <!-- Chat messages -->
     <div id="response-area" class="response-area">
       <p class="placeholder">Miko is here. say something soft…</p>
     </div>
 
-    <!-- Input area -->
+    <!-- Input -->
     <div class="input-area">
       <input type="text" id="user-input" placeholder="whisper to Miko…" autocomplete="off" autofocus>
       <button id="mic-btn" class="mic-btn" title="Hold to speak (or hold Space)">
@@ -176,7 +58,227 @@
         </svg>
       </button>
     </div>
-  </div>
+
+  </div><!-- /chat-view -->
+
+
+  <!-- ═══════════════════════════════════════════════
+       SETTINGS DRAWER  (slides over full window)
+       renderer.js queries elements by ID — all IDs
+       must stay identical to before.
+  ════════════════════════════════════════════════ -->
+  <div id="settings-panel" class="settings-panel hidden">
+
+    <!-- Drawer header -->
+    <div class="drawer-header">
+      <button id="drawer-close" class="back-btn" title="Back">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </button>
+      <span class="drawer-title">Settings</span>
+      <button id="quit-btn" class="quit-btn" title="Quit app">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="tab-ai">AI</button>
+      <button class="tab-btn" data-tab="tab-voice">Voice</button>
+      <button class="tab-btn" data-tab="tab-avatar">Avatar</button>
+      <button class="tab-btn" data-tab="tab-debug">Debug</button>
+    </div>
+
+    <!-- Tab body -->
+    <div class="tab-body">
+
+      <!-- ── AI Tab ── -->
+      <div id="tab-ai" class="tab-pane active">
+
+        <div class="setting-section">
+          <div class="section-label">Model Mode</div>
+          <div class="radio-stack">
+            <label class="radio-option">
+              <input type="radio" name="model-mode" value="local_only">
+              <span class="radio-dot"></span>
+              <span>Local Only</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="model-mode" value="cloud_preferred">
+              <span class="radio-dot"></span>
+              <span>Cloud <em>(local fallback)</em></span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="model-mode" value="cloud_only">
+              <span class="radio-dot"></span>
+              <span>Cloud Only</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="cloud-provider-group" class="setting-section hidden">
+          <div class="section-label">Cloud Provider</div>
+          <div class="radio-stack">
+            <label class="radio-option">
+              <input type="radio" name="cloud-provider" value="gemini" checked>
+              <span class="radio-dot"></span>
+              <span>Google Gemini</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="cloud-provider" value="openrouter">
+              <span class="radio-dot"></span>
+              <span>OpenRouter</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="api-key-group" class="setting-section hidden">
+          <label class="section-label" for="api-key-input">Gemini API Key</label>
+          <input type="password" id="api-key-input" class="glass-input"
+            placeholder="Enter Gemini API key" autocomplete="off">
+        </div>
+
+        <div id="openrouter-key-group" class="setting-section hidden">
+          <label class="section-label" for="openrouter-key-input">OpenRouter API Key</label>
+          <input type="password" id="openrouter-key-input" class="glass-input"
+            placeholder="Enter OpenRouter API key" autocomplete="off">
+        </div>
+
+      </div><!-- /tab-ai -->
+
+
+      <!-- ── Voice Tab ── -->
+      <div id="tab-voice" class="tab-pane">
+
+        <div class="setting-section">
+          <label class="toggle-row">
+            <span>Voice Enabled</span>
+            <span class="toggle-wrap">
+              <input type="checkbox" id="voice-toggle" class="toggle-input">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </span>
+          </label>
+        </div>
+
+        <div id="voice-settings-group" class="setting-section hidden">
+          <div class="section-label">TTS Engine</div>
+          <div class="radio-stack">
+            <label class="radio-option">
+              <input type="radio" name="tts-engine" value="system" checked>
+              <span class="radio-dot"></span>
+              <span>System</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="tts-engine" value="styletts2">
+              <span class="radio-dot"></span>
+              <span>Neural <em>(Experimental)</em></span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="tts-engine" value="elevenlabs">
+              <span class="radio-dot"></span>
+              <span>ElevenLabs</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="elevenlabs-settings-group" class="setting-section hidden">
+          <label class="section-label" for="elevenlabs-key-input">ElevenLabs API Key</label>
+          <input type="password" id="elevenlabs-key-input" class="glass-input"
+            placeholder="Paste your ElevenLabs API key" autocomplete="off">
+          <label class="section-label" for="elevenlabs-voice-select" style="margin-top:14px;">Voice</label>
+          <select id="elevenlabs-voice-select" class="glass-select"></select>
+          <button id="elevenlabs-test-btn" class="glass-btn" style="margin-top:12px;">▶ Test Voice</button>
+          <div id="elevenlabs-test-status" class="hint-text" style="margin-top:6px;"></div>
+        </div>
+
+        <div class="setting-section">
+          <label class="section-label" for="groq-stt-key-input">Speech-to-Text (Groq Whisper)</label>
+          <input type="password" id="groq-stt-key-input" class="glass-input"
+            placeholder="Groq API key — free at console.groq.com" autocomplete="off">
+          <p class="hint-text" style="margin-top:6px;">Hold mic button or Space to talk · Ctrl+Alt+A from anywhere</p>
+        </div>
+
+      </div><!-- /tab-voice -->
+
+
+      <!-- ── Avatar Tab ── -->
+      <div id="tab-avatar" class="tab-pane">
+
+        <div class="setting-section">
+          <label class="toggle-row">
+            <span>Show Live2D Avatar</span>
+            <span class="toggle-wrap">
+              <input type="checkbox" id="avatar-toggle" class="toggle-input">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </span>
+          </label>
+        </div>
+
+        <div class="setting-section">
+          <label class="section-label" for="model-select">Avatar Model</label>
+          <select id="model-select" class="glass-select">
+            <option value="" disabled selected>Loading…</option>
+          </select>
+          <div id="model-capabilities" class="capabilities-container hidden"></div>
+        </div>
+
+      </div><!-- /tab-avatar -->
+
+
+      <!-- ── Debug Tab ── -->
+      <div id="tab-debug" class="tab-pane">
+
+        <div class="section-label" style="margin-bottom:12px;">Emotion Test Triggers</div>
+        <div class="emotion-grid">
+          <button id="btn-dbg-happy"       class="emo-btn">😊 Happy</button>
+          <button id="btn-dbg-sad"         class="emo-btn">😢 Sad</button>
+          <button id="btn-dbg-crying"      class="emo-btn">😭 Crying</button>
+          <button id="btn-dbg-angry"       class="emo-btn">😠 Angry</button>
+          <button id="btn-dbg-dark"        class="emo-btn">🌑 Dark</button>
+          <button id="btn-dbg-playful"     class="emo-btn">😜 Playful</button>
+          <button id="btn-dbg-surprised"   class="emo-btn">😲 Surprised</button>
+          <button id="btn-dbg-embarrassed" class="emo-btn">😳 Flustered</button>
+          <button id="btn-dbg-excited"     class="emo-btn">🤩 Excited</button>
+          <button id="btn-dbg-sleepy"      class="emo-btn">😴 Sleepy</button>
+          <button id="btn-dbg-smug"        class="emo-btn">😏 Smug</button>
+          <button id="btn-dbg-love"        class="emo-btn">🥰 Love</button>
+          <button id="btn-dbg-confused"    class="emo-btn">😕 Confused</button>
+          <button id="btn-dbg-scared"      class="emo-btn">😱 Scared</button>
+          <button id="btn-dbg-disgusted"   class="emo-btn">🤢 Disgusted</button>
+          <button id="btn-dbg-determined"  class="emo-btn">😤 Determined</button>
+          <button id="btn-dbg-curious"     class="emo-btn">🧐 Curious</button>
+          <button id="btn-dbg-neutral"     class="emo-btn emo-reset">⟲ Reset</button>
+        </div>
+
+      </div><!-- /tab-debug -->
+
+    </div><!-- /tab-body -->
+
+  </div><!-- /settings-panel -->
+
+
+  <!-- Tab switching (runs before renderer module) -->
+  <script>
+    (function () {
+      const tabBtns = document.querySelectorAll('.tab-btn');
+      const tabPanes = document.querySelectorAll('.tab-pane');
+
+      tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          tabBtns.forEach(b => b.classList.remove('active'));
+          tabPanes.forEach(p => p.classList.remove('active'));
+          btn.classList.add('active');
+          const target = document.getElementById(btn.dataset.tab);
+          if (target) target.classList.add('active');
+        });
+      });
+    })();
+  </script>
 
   <script type="module" src="renderer.js"></script>
 </body>

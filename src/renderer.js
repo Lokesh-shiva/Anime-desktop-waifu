@@ -803,7 +803,19 @@ userInput.addEventListener('keydown', (e) => {
 // Settings toggle
 settingsBtn.addEventListener('click', toggleSettings);
 
-// Close settings when clicking outside
+// Drawer back / close button
+const drawerClose = document.getElementById('drawer-close');
+if (drawerClose) {
+    drawerClose.addEventListener('click', () => settingsPanel.classList.add('hidden'));
+}
+
+// Quit button inside settings drawer
+const quitBtn = document.getElementById('quit-btn');
+if (quitBtn) {
+    quitBtn.addEventListener('click', () => window.electronAPI?.quitApp());
+}
+
+// Close settings when clicking outside (harmless no-op when drawer is full-screen overlay)
 document.addEventListener('click', (e) => {
     if (!settingsPanel.contains(e.target) && !settingsBtn.contains(e.target)) {
         settingsPanel.classList.add('hidden');

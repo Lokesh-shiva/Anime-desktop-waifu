@@ -1,22 +1,26 @@
-const { app, BrowserWindow, ipcMain, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, nativeImage } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
 let mainWindow = null;
 let avatarWindow = null;
+let tray = null;
+let isQuitting = false;
 
 // Default model path
 const DEFAULT_MODEL_PATH = path.join(__dirname, '2D_Livemodel', 'tuzi_mian', 'tuzi mian.model3.json');
 
 function createWindow() {
     mainWindow = new BrowserWindow({
-        width: 420,
-        height: 320,
-        resizable: false,
+        width: 460,
+        height: 700,
+        minWidth: 380,
+        minHeight: 500,
+        resizable: true,
         frame: true,
         autoHideMenuBar: true,
-        backgroundColor: '#1a1a2e',
+        backgroundColor: '#080518',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -29,13 +33,82 @@ function createWindow() {
     // Open DevTools for debugging (remove in production)
     mainWindow.webContents.openDevTools({ mode: 'detach' });
 
+    // Hide to tray instead of quitting when user clicks X
+    mainWindow.on('close', (e) => {
+        if (!isQuitting) {
+            e.preventDefault();
+            mainWindow.hide();
+        }
+    });
+
     mainWindow.on('closed', () => {
         mainWindow = null;
-        // Close avatar window when main window closes
         if (avatarWindow && !avatarWindow.isDestroyed()) {
             avatarWindow.close();
         }
     });
+}
+
+/**
+ * Create the system tray icon and context menu
+ */
+function createTray() {
+    // Try several candidate icon paths
+    const iconCandidates = [
+        path.join(__dirname, '2D_Livemodel', 'Elf', 'Elf', 'VT_Elf', 'icon.png'),
+        path.join(__dirname, 'assets', 'tray-icon.png'),
+    ];
+
+    const iconPath = iconCandidates.find(p => fs.existsSync(p));
+    let icon;
+    if (iconPath) {
+        icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+    } else {
+        // Minimal 1×1 transparent fallback so Tray() doesn't throw
+        icon = nativeImage.createEmpty();
+    }
+
+    tray = new Tray(icon);
+    tray.setToolTip('Waifu Assistant — Miko');
+
+    const contextMenu = Menu.buildFromTemplate([
+        {
+            label: 'Show Miko',
+            click: () => { mainWindow?.show(); mainWindow?.focus(); }
+        },
+        { type: 'separator' },
+        {
+            label: 'Quit',
+            click: forceQuit
+        }
+    ]);
+    tray.setContextMenu(contextMenu);
+
+    // Left-click: toggle window visibility
+    tray.on('click', () => {
+        if (mainWindow?.isVisible()) {
+            mainWindow.hide();
+        } else {
+            mainWindow?.show();
+            mainWindow?.focus();
+        }
+    });
+
+    // Double-click: always show
+    tray.on('double-click', () => {
+        mainWindow?.show();
+        mainWindow?.focus();
+    });
+}
+
+/**
+ * Actually quit — bypasses the hide-on-close override
+ */
+function forceQuit() {
+    isQuitting = true;
+    tray?.destroy();
+    tray = null;
+    app.quit();
 }
 
 /**
@@ -97,11 +170,17 @@ function closeAvatarWindow() {
 
 app.whenReady().then(() => {
     createWindow();
+    createTray();
     startTTSServer();
 
     // Global hotkey — Ctrl+Alt+A — activate PTT from anywhere
     const hotkeyRegistered = globalShortcut.register('Control+Alt+A', () => {
         if (mainWindow && !mainWindow.isDestroyed()) {
+            // Also pop window into view when hotkey triggers
+            if (!mainWindow.isVisible()) {
+                mainWindow.show();
+                mainWindow.focus();
+            }
             mainWindow.webContents.send('wake:activate');
         }
     });
@@ -143,8 +222,9 @@ function cleanupTTSServer() {
 }
 
 app.on('window-all-closed', () => {
-    cleanupTTSServer();
-    app.quit();
+    // App lives in the system tray — don't quit when all windows close.
+    // Quit only via tray menu or ipcMain 'quit-app'.
+    // (On macOS this event fires when the last window closes but dock icon keeps app alive anyway.)
 });
 
 app.on('before-quit', () => {
@@ -171,10 +251,17 @@ process.on('SIGTERM', () => {
 });
 
 app.on('activate', () => {
+    // macOS: re-show window when dock icon clicked
     if (mainWindow === null) {
         createWindow();
+    } else {
+        mainWindow.show();
+        mainWindow.focus();
     }
 });
+
+// Renderer requests a real quit (from the × button inside settings)
+ipcMain.on('quit-app', () => forceQuit());
 
 // ============================================
 // Memory Persistence Handlers
