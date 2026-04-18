@@ -14,7 +14,9 @@ const STORAGE_KEYS = {
     TTS_ENGINE: 'waifu_tts_engine',
     ELEVENLABS_API_KEY: 'waifu_elevenlabs_api_key',
     ELEVENLABS_VOICE_ID: 'waifu_elevenlabs_voice_id',
-    GROQ_STT_API_KEY: 'waifu_groq_stt_api_key'
+    GROQ_STT_API_KEY: 'waifu_groq_stt_api_key',
+    SCREEN_VISION_ENABLED: 'waifu_screen_vision_enabled',
+    CAMERA_VISION_ENABLED: 'waifu_camera_vision_enabled'
 };
 
 // Model selection modes
@@ -245,6 +247,22 @@ export function setGroqSttApiKey(key) {
     console.log('[Settings] Groq STT API key', key ? 'set' : 'cleared');
 }
 
+export function isScreenVisionEnabled() {
+    return localStorage.getItem(STORAGE_KEYS.SCREEN_VISION_ENABLED) === 'true';
+}
+export function setScreenVisionEnabled(val) {
+    localStorage.setItem(STORAGE_KEYS.SCREEN_VISION_ENABLED, val ? 'true' : 'false');
+    notifyListeners({ type: 'screenVisionEnabled', value: val });
+}
+
+export function isCameraVisionEnabled() {
+    return localStorage.getItem(STORAGE_KEYS.CAMERA_VISION_ENABLED) === 'true';
+}
+export function setCameraVisionEnabled(val) {
+    localStorage.setItem(STORAGE_KEYS.CAMERA_VISION_ENABLED, val ? 'true' : 'false');
+    notifyListeners({ type: 'cameraVisionEnabled', value: val });
+}
+
 /**
  * Subscribe to settings changes
  * @param {function({type: string, value: any}): void} callback
@@ -288,6 +306,10 @@ export const Settings = {
     setElevenLabsVoiceId,
     getGroqSttApiKey,
     setGroqSttApiKey,
+    isScreenVisionEnabled,
+    setScreenVisionEnabled,
+    isCameraVisionEnabled,
+    setCameraVisionEnabled,
     subscribe
 };
 

@@ -36,9 +36,10 @@ function formatFactByConfidence(fact) {
  * @param {Object} memoryContext  - { facts, sessionSummary, previousSessions, moodDescription }
  * @param {Object} presenceHints  - { timeOfDay, inputRhythm } (optional)
  * @param {Array}  recentMessages - raw { role, content }[] from memoryManager (optional)
+ * @param {Object} visionContext  - { screen: { activity, ... }, camera: { userState, isPresent, ... } } (optional)
  * @returns {string}
  */
-export function buildSystemPrompt(memoryContext, presenceHints, recentMessages) {
+export function buildSystemPrompt(memoryContext, presenceHints, recentMessages, visionContext) {
     let prompt = DEFAULT_CONFIG.systemPrompt;
 
     const hasFacts    = memoryContext?.facts?.length > 0;
@@ -47,8 +48,11 @@ export function buildSystemPrompt(memoryContext, presenceHints, recentMessages) 
                         memoryContext.previousSessions.length > 0;
     const hasMood     = !!memoryContext?.moodDescription;
     const recentTurns = Array.isArray(recentMessages) ? recentMessages.slice(-6) : [];
+    const hasScreen   = !!visionContext?.screen?.activity;
+    const hasCamera   = visionContext?.camera?.isPresent && visionContext.camera.userState !== 'unknown';
 
-    const hasAnyContext = hasFacts || hasSummary || hasPrevious || hasMood || recentTurns.length > 0;
+    const hasAnyContext = hasFacts || hasSummary || hasPrevious || hasMood ||
+                          recentTurns.length > 0 || hasScreen || hasCamera;
     if (!hasAnyContext) return prompt;
 
     prompt += `\n\n=== CONTEXT (internal — never quote or reference directly) ===`;
@@ -56,6 +60,18 @@ export function buildSystemPrompt(memoryContext, presenceHints, recentMessages) 
     // ── Mood ────────────────────────────────────────────────────────────────
     if (hasMood) {
         prompt += `\n\n[Your current mood]\n${memoryContext.moodDescription}\n`;
+    }
+
+    // ── Vision context ───────────────────────────────────────────────────────
+    if (hasScreen || hasCamera) {
+        prompt += `\n[What you can sense right now]\n`;
+        prompt += `Use this awareness naturally — don't announce it, just let it colour your responses.\n`;
+        if (hasScreen) {
+            prompt += `Screen: ${visionContext.screen.activity}\n`;
+        }
+        if (hasCamera) {
+            prompt += `They look: ${visionContext.camera.userState}\n`;
+        }
     }
 
     // ── Recent conversation turns ────────────────────────────────────────────

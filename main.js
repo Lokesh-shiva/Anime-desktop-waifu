@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, nativeImage, desktopCapturer } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -559,5 +559,23 @@ ipcMain.handle('tts-health', async () => {
         return await response.json();
     } catch (error) {
         return { status: 'unavailable', error: error.message };
+    }
+});
+
+/**
+ * Screen capture — returns base64 JPEG of the primary screen at 720p.
+ * desktopCapturer must run in the main process (renderer sandbox blocks it).
+ */
+ipcMain.handle('capture-screen', async () => {
+    try {
+        const sources = await desktopCapturer.getSources({
+            types: ['screen'],
+            thumbnailSize: { width: 1280, height: 720 }
+        });
+        if (!sources.length) return null;
+        return sources[0].thumbnail.toJPEG(55).toString('base64');
+    } catch (e) {
+        console.error('[Main] Screen capture failed:', e.message);
+        return null;
     }
 });

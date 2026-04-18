@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Global hotkey wake event
     onWakeActivate: (callback) => ipcRenderer.on('wake:activate', () => callback()),
 
+    // Screen capture (desktopCapturer runs in main process)
+    captureScreen: () => ipcRenderer.invoke('capture-screen'),
+
     // Quit the app from renderer
     quitApp: () => ipcRenderer.send('quit-app')
 });

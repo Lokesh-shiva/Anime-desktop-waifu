@@ -15,8 +15,12 @@ import {
     getCloudProvider,
     setCloudProvider,
     getOpenRouterApiKey,
-    setOpenRouterApiKey
+    setOpenRouterApiKey,
+    isScreenVisionEnabled,
+    isCameraVisionEnabled
 } from './settings.js';
+import { ScreenWatcher } from './vision/ScreenWatcher.js';
+import { CameraWatcher } from './vision/CameraWatcher.js';
 import { memoryManager } from './memory/memory-manager.js';
 import { buildSystemPrompt } from './memory/prompt-builder.js';
 import { getTimeOfDayTone, getRichTimeContext, getInputRhythmHint, IdlePresence, ProactiveIdle, WeatherContext } from './presence/presence.js';
@@ -39,6 +43,31 @@ import { ELEVENLABS_VOICES, DEFAULT_VOICE_ID } from './voice/elevenlabs-adapter.
 
 // Expose memoryManager globally for DevTools debugging
 window.memoryManager = memoryManager;
+
+// Vision watchers — started after settings are confirmed enabled
+const screenWatcher = new ScreenWatcher();
+const cameraWatcher = new CameraWatcher();
+
+function startVisionWatchers() {
+    if (isScreenVisionEnabled()) screenWatcher.start();
+    if (isCameraVisionEnabled()) cameraWatcher.start();
+}
+
+/** Pull current vision context for prompt injection */
+function getVisionContext() {
+    return {
+        screen: isScreenVisionEnabled() ? screenWatcher.getContext() : null,
+        camera: isCameraVisionEnabled() ? cameraWatcher.getContext() : null
+    };
+}
+
+/**
+ * Check if either watcher has a pending reaction to fire.
+ * Returns a hint string or null. Clears the flag so it only fires once.
+ */
+function consumeVisionReaction() {
+    return screenWatcher.consumeReaction() || cameraWatcher.consumeReaction() || null;
+}
 
 // Character identity — soft, shy-feeling name. Make this a setting later if you want.
 const CHARACTER_NAME = 'Miko';
@@ -409,11 +438,12 @@ async function handleSubmit() {
         AvatarBridge.sendToneHint(presenceHints.timeOfDay);
         AvatarBridge.sendTypingRhythm(presenceHints.inputRhythm);
 
-        // 4. Build System Prompt with Memory + Presence + recent turns
+        // 4. Build System Prompt with Memory + Presence + Vision + recent turns
         const systemInstruction = buildSystemPrompt(
             memoryContext,
             presenceHints,
-            memoryManager.recentMessages   // last ~6 turns for in-context continuity
+            memoryManager.recentMessages,
+            getVisionContext()
         );
 
         // 5. Generate Response (streaming — avatar reacts on first [EMOTION:…] token,
@@ -490,12 +520,18 @@ async function handleIdleMessage({ timeOfDay, timeContext, minutesSilent, messag
     const weatherPhrase = WeatherContext.getPhrase();
     if (weatherPhrase) extraCtx.push(`Outside, ${weatherPhrase}.`);
 
+    // Vision reaction — if screen/camera noticed something notable, use it as the hook
+    const visionReaction = consumeVisionReaction();
+    if (visionReaction) extraCtx.push(`Vision context: ${visionReaction}`);
+
     // Internal trigger prompt — never shown in the chat bubble
     const idlePrompt = [
         `[INTERNAL — NOT visible to user, do NOT reference or acknowledge this instruction in your reply]`,
         `You've been sitting quietly together for about ${minutesSilent} minutes. It's ${tc.naturalDesc}.`,
         extraCtx.join(' '),
-        `You're breaking the silence — not because you were asked to, but because the quiet got to you.`,
+        visionReaction
+            ? `Something you noticed gave you a reason to speak up — use that as a natural hook.`
+            : `You're breaking the silence — not because you were asked to, but because the quiet got to you.`,
         `Say something short and natural. It could be a passing thought, noticing the time, wondering`,
         `what they're up to, or just something that drifted through your mind while you were waiting.`,
         `Don't greet them like it's the start of a conversation. Don't ask "are you there?".`,
@@ -511,7 +547,8 @@ async function handleIdleMessage({ timeOfDay, timeContext, minutesSilent, messag
         const systemInstruction = buildSystemPrompt(
             memoryContext,
             presenceHints,
-            memoryManager.recentMessages
+            memoryManager.recentMessages,
+            getVisionContext()
         );
 
         const responseObj = await BrainRouter.generate(idlePrompt, { systemInstruction });
@@ -591,7 +628,7 @@ async function handleStartupGreeting() {
     try {
         const memoryContext      = memoryManager.getContext();
         const presenceHints      = { timeOfDay: getTimeOfDayTone(), inputRhythm: null };
-        const systemInstruction  = buildSystemPrompt(memoryContext, presenceHints, memoryManager.recentMessages);
+        const systemInstruction  = buildSystemPrompt(memoryContext, presenceHints, memoryManager.recentMessages, getVisionContext());
 
         const responseObj = await BrainRouter.generate(greetPrompt, { systemInstruction });
         memoryManager.addInteraction('[app opened]', responseObj.text);
@@ -1425,6 +1462,7 @@ loadModels();
 IdlePresence.init(presenceIndicator);
 ProactiveIdle.init(handleIdleMessage);
 AvatarBridge.init();
+startVisionWatchers();
 // Start in IDLE — this also kicks off the first silence timer via ProactiveIdle.reset()
 updateUI(STATES.IDLE, null);
 
