@@ -64,6 +64,126 @@ export const BrainRouter = {
     },
 
     /**
+     * Generate a response with streaming — fires onProvisionalEmotion as soon as
+     * the [EMOTION:label:intensity] tag arrives in the first tokens, then resolves
+     * with the full parsed response object when generation is complete.
+     *
+     * Falls back to regular generate() if the chosen adapter has no stream() method
+     * (e.g. OpenRouter), still calling onProvisionalEmotion from the parsed arc.
+     *
+     * @param {string} prompt
+     * @param {Object} options
+     * @param {function({label:string, intensity:number}): void} onProvisionalEmotion
+     * @param {function(string): void} onTextChunk - receives raw (pre-parse) accumulated text on each chunk
+     * @returns {Promise<Object>} - same shape as generate()
+     */
+    async generateStreaming(prompt, options = {}, onProvisionalEmotion = null, onTextChunk = null) {
+        const mode = getModelMode();
+
+        // Pick adapter using same logic as generate()
+        let adapter;
+        if (options.preferLocal && mode !== MODEL_MODE.CLOUD_ONLY) {
+            adapter = OllamaAdapter;
+        } else {
+            switch (mode) {
+                case MODEL_MODE.LOCAL_ONLY:     adapter = OllamaAdapter;       break;
+                case MODEL_MODE.CLOUD_PREFERRED:
+                case MODEL_MODE.CLOUD_ONLY:     adapter = getCloudAdapter();   break;
+                default:                        adapter = OllamaAdapter;
+            }
+        }
+
+        // --- Streaming path ---
+        if (typeof adapter.stream === 'function') {
+            const EMOTION_TAG_RE = /^\[EMOTION:([a-z]+):([\d.]+)\]/m;
+            const VALID_LABELS   = new Set([
+                'happy','sad','crying','anger','angry','dark','playful','surprised',
+                'embarrassed','excited','sleepy','smug','love','confused','scared',
+                'disgusted','determined','curious','shy','grateful','hesitant',
+                'melancholic','flustered','tender','calm','longing','lonely','kind',
+                'neutral','menacing'
+            ]);
+
+            let provisionalFired = false;
+            const EMOTION_LINE_RE = /^\[EMOTION:[^\]\n]+\]\n?/;
+
+            const onChunk = (_chunk, fullSoFar) => {
+                // ── 1. Fire provisional emotion once (first [EMOTION:…] tag line) ──
+                if (!provisionalFired && onProvisionalEmotion) {
+                    const firstLine = fullSoFar.split('\n')[0];
+                    const match     = firstLine.match(EMOTION_TAG_RE);
+                    if (match) {
+                        const label     = match[1].toLowerCase();
+                        const intensity = Math.min(1, Math.max(0, parseFloat(match[2])));
+                        if (VALID_LABELS.has(label)) {
+                            provisionalFired = true;
+                            console.log(`[Brain] Provisional emotion: ${label} @ ${intensity}`);
+                            onProvisionalEmotion({ label, intensity });
+                        }
+                    }
+                }
+
+                // ── 2. Stream raw text (minus emotion tag prefix) to UI ──
+                if (onTextChunk) {
+                    const stripped = fullSoFar.replace(EMOTION_LINE_RE, '');
+                    if (stripped) onTextChunk(stripped);
+                }
+            };
+
+            try {
+                let rawResponse = await adapter.stream(prompt, options, onChunk);
+
+                // For CLOUD_PREFERRED, fall back to local if cloud stream failed
+                // (handled via catch below)
+
+                if (options.raw) return rawResponse;
+
+                // Strip the [EMOTION:…] prefix line before JSON parsing
+                rawResponse = rawResponse.replace(/^\[EMOTION:[^\]\n]+\]\n?/, '').trim();
+                return this._parseLLMResponse(rawResponse);
+
+            } catch (streamError) {
+                console.warn('[Brain] Streaming failed:', streamError.message);
+
+                // For CLOUD_PREFERRED, try local fallback
+                if (mode === MODEL_MODE.CLOUD_PREFERRED && adapter !== OllamaAdapter) {
+                    console.log('[Brain] Falling back to local stream/generate');
+                    try {
+                        if (typeof OllamaAdapter.stream === 'function') {
+                            let rawResponse = await OllamaAdapter.stream(prompt, options, onChunk);
+                            if (options.raw) return rawResponse;
+                            rawResponse = rawResponse.replace(/^\[EMOTION:[^\]\n]+\]\n?/, '').trim();
+                            return this._parseLLMResponse(rawResponse);
+                        }
+                        const rawResponse = await OllamaAdapter.generate(prompt, options);
+                        if (options.raw) return rawResponse;
+                        const parsed = this._parseLLMResponse(rawResponse);
+                        if (!provisionalFired && onProvisionalEmotion && parsed.emotion) {
+                            onProvisionalEmotion(parsed.emotion);
+                        }
+                        return parsed;
+                    } catch (localError) {
+                        throw this._sanitizeError(localError);
+                    }
+                }
+
+                throw this._sanitizeError(streamError);
+            }
+        }
+
+        // --- Non-streaming fallback (e.g. OpenRouter) ---
+        console.log('[Brain] Adapter has no stream() — using generate() fallback');
+        const rawResponse = await adapter.generate(prompt, options);
+        if (options.raw) return rawResponse;
+        const parsed = this._parseLLMResponse(rawResponse);
+        // Fire provisional from the parsed arc so caller still gets the callback
+        if (onProvisionalEmotion && parsed.emotion) {
+            onProvisionalEmotion(parsed.emotion);
+        }
+        return parsed;
+    },
+
+    /**
      * Parse raw string from LLM into structured JSON.
      * Handles local models (phi4-mini) that ramble before/after the JSON block.
      */

@@ -85,6 +85,14 @@ export class GazeAnimator {
         this._wanderPhaseX = Math.random() * Math.PI * 2;
         this._wanderPhaseY = Math.random() * Math.PI * 2;
         this._wanderRadius = GAZE_WANDER.default;
+
+        // ── Micro-saccade state ───────────────────────────────────────────────
+        // Saccades are fast, ballistic eye jumps to a new fixation point.
+        // Each jump decays back to the gaze target quickly (~150 ms half-life).
+        this._saccadeX        = 0;
+        this._saccadeY        = 0;
+        this._saccadeTimer    = Math.random() * 2.0;   // stagger first saccade
+        this._saccadeInterval = 1.8 + Math.random() * 2.5;
     }
 
     setRegistry(registry) {
@@ -121,10 +129,26 @@ export class GazeAnimator {
         const wanderX = Math.sin(this._wanderPhaseX) * this._wanderRadius;
         const wanderY = Math.cos(this._wanderPhaseY * 1.3) * this._wanderRadius;
 
-        // Lerp current toward (target + wander)
+        // ── Micro-saccade ─────────────────────────────────────────────────────
+        // Fire a small ballistic jump every 1.8–4.3 s, then decay back quickly.
+        this._saccadeTimer += dt;
+        if (this._saccadeTimer >= this._saccadeInterval) {
+            const angle = Math.random() * Math.PI * 2;
+            const mag   = 0.04 + Math.random() * 0.07;
+            this._saccadeX        = Math.cos(angle) * mag;
+            this._saccadeY        = Math.sin(angle) * mag * 0.5;  // less vertical range
+            this._saccadeTimer    = 0;
+            this._saccadeInterval = 1.8 + Math.random() * 2.5;
+        }
+        // Exponential decay: ~150 ms half-life  (0.001^(dt*6.7) ≈ e^(-dt/0.145))
+        const decay       = Math.pow(0.001, dt * 6.7);
+        this._saccadeX   *= decay;
+        this._saccadeY   *= decay;
+
+        // Lerp current toward (target + wander + saccade)
         const lerpFactor = Math.min(1, LERP_SPEED * dt);
-        this._currentX += (this._targetX + wanderX - this._currentX) * lerpFactor;
-        this._currentY += (this._targetY + wanderY - this._currentY) * lerpFactor;
+        this._currentX += (this._targetX + wanderX + this._saccadeX - this._currentX) * lerpFactor;
+        this._currentY += (this._targetY + wanderY + this._saccadeY - this._currentY) * lerpFactor;
 
         return {
             [PARAM_IDS.EYE_BALL_X]: this._currentX,

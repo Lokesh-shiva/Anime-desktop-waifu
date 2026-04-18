@@ -339,13 +339,44 @@ function showError(error) {
 
 /**
  * Escape HTML to prevent XSS
- * @param {string} text 
+ * @param {string} text
  * @returns {string}
  */
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+/**
+ * Extract the partial "text" field value from an incomplete JSON string.
+ * Used to show streaming LLM output in the chat bubble before the full
+ * response JSON is assembled.
+ *
+ * e.g. given '{"text": "wait, you actua'  → returns 'wait, you actua'
+ *      given '{"text": "done.", "emotion"' → returns 'done.'
+ *
+ * @param {string} rawJson - partial JSON string (emotion tag already stripped)
+ * @returns {string} - decoded partial text, or '' if not yet parseable
+ */
+function extractPartialText(rawJson) {
+    // Match opening of "text": "..."
+    const match = rawJson.match(/"text"\s*:\s*"([\s\S]*)/);
+    if (!match) return '';
+
+    let partial = match[1];
+
+    // Find the first unescaped closing quote — marks end of the value
+    const closeIdx = partial.search(/(?<!\\)"/);
+    if (closeIdx >= 0) partial = partial.slice(0, closeIdx);
+
+    // Unescape JSON escape sequences
+    return partial
+        .replace(/\\n/g, '\n')
+        .replace(/\\t/g, '\t')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\')
+        .trim();
 }
 
 /**
@@ -385,8 +416,39 @@ async function handleSubmit() {
             memoryManager.recentMessages   // last ~6 turns for in-context continuity
         );
 
-        // 5. Generate Response
-        const responseObj = await BrainRouter.generate(query, { systemInstruction });
+        // 5. Generate Response (streaming — avatar reacts on first [EMOTION:…] token,
+        //    chat bubble fills progressively as tokens arrive)
+        const responseObj = await BrainRouter.generateStreaming(
+            query,
+            { systemInstruction },
+            // onProvisionalEmotion — fires on first [EMOTION:…] tag (~0.3 s in)
+            (provisionalEmotion) => {
+                console.log('[Renderer] Provisional emotion:', provisionalEmotion.label);
+                AvatarBridge.sendComplexIntent({ emotion: provisionalEmotion });
+            },
+            // onTextChunk — fires every token batch; updates bubble progressively
+            (rawChunk) => {
+                const partialText = extractPartialText(rawChunk);
+                if (!partialText) return;
+
+                const bubble = document.getElementById(THINKING_BUBBLE_ID);
+                if (!bubble) return;
+
+                // First text arrival: swap typing-indicator for a live text paragraph
+                if (bubble.classList.contains('msg-thinking')) {
+                    bubble.classList.remove('msg-thinking');
+                    bubble.innerHTML =
+                        `<span class="msg-label">${escapeHtml(CHARACTER_NAME)}</span>` +
+                        `<p class="msg-text msg-streaming"></p>`;
+                }
+
+                const textEl = bubble.querySelector('.msg-text');
+                if (textEl) {
+                    textEl.textContent = partialText;
+                    responseArea.scrollTop = responseArea.scrollHeight;
+                }
+            }
+        );
 
         // 7. Update Memory (in background)
         memoryManager.addInteraction(query, responseObj.text);

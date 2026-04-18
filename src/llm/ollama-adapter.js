@@ -69,6 +69,81 @@ const OllamaAdapter = {
     },
 
     /**
+     * Stream a response from Ollama, calling onChunk for each token batch.
+     * Resolves with the full accumulated text when done.
+     * @param {string} prompt
+     * @param {Object} options
+     * @param {function(string, string): void} onChunk - (newChunk, fullSoFar)
+     * @returns {Promise<string>}
+     */
+    async stream(prompt, options = {}, onChunk) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), DEFAULT_CONFIG.timeout);
+
+        const systemPrompt = options.systemInstruction || DEFAULT_CONFIG.systemPrompt;
+        const messages = [
+            { role: 'system', content: systemPrompt },
+            { role: 'user',   content: prompt }
+        ];
+
+        try {
+            const response = await fetch('http://localhost:11434/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal,
+                body: JSON.stringify({
+                    model: MODEL,
+                    messages,
+                    stream: true,
+                    options: {
+                        num_predict: DEFAULT_CONFIG.maxTokens,
+                        temperature: DEFAULT_CONFIG.temperature
+                    }
+                })
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) throw new Error(`Ollama error: ${response.status}`);
+
+            const reader  = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = '';
+            let buffer   = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // hold back incomplete trailing line
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const data  = JSON.parse(line);
+                        const chunk = data.message?.content || '';
+                        if (chunk) {
+                            fullText += chunk;
+                            onChunk?.(chunk, fullText);
+                        }
+                        if (data.done) return fullText;
+                    } catch (_) { /* incomplete JSON line — skip */ }
+                }
+            }
+
+            return fullText;
+
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') throw new Error('Request timed out');
+            if (error.message.includes('fetch')) throw new Error('Assistant offline - is Ollama running?');
+            throw error;
+        }
+    },
+
+    /**
      * Check if Ollama is available
      * @returns {Promise<boolean>}
      */

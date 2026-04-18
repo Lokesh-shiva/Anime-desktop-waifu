@@ -14,6 +14,7 @@ import { MotionIntentMapper } from './MotionIntentMapper.js';
 import { MouthSync } from './MouthSync.js';
 import { IdleAnimator } from './IdleAnimator.js';
 import { GazeAnimator } from './GazeAnimator.js';
+import { MotionEngine } from './MotionEngine.js';
 import { PARAM_IDS } from './avatar-config.js';
 
 export class AvatarController {
@@ -28,8 +29,13 @@ export class AvatarController {
         this.mouthSync = new MouthSync();
         this.idleAnimator = new IdleAnimator(this.registry);
         this.gazeAnimator = new GazeAnimator(this.registry);
+        this.motionEngine = new MotionEngine(this.registry);
         this.cursorInfluence = {};
         this.emotionParams = {};
+
+        // MotionEngine outputs — populated each tick, consumed by monkey-patch
+        this._meAbsolute = {};   // BREATH (applied before emotion params)
+        this._meAdditive = {};   // ANGLE_X/Y/Z deltas (applied after emotion params)
 
         this.activeEmotion = null;
 
@@ -120,6 +126,7 @@ export class AvatarController {
         this.intentMapper.setRegistry(this.registry);
         this.idleAnimator.setRegistry(this.registry);
         this.gazeAnimator.setRegistry(this.registry);
+        this.motionEngine.setRegistry(this.registry);
 
         console.log('[AvatarController] Capabilities Rebuilt:', Object.keys(caps).filter(k => caps[k]));
 
@@ -154,39 +161,34 @@ export class AvatarController {
                 // Let the original pipeline run (motions, expressions, physics)
                 originalUpdate(dt, now);
 
-                // Calculate transition progress (0 to 1)
+                const coreModel = this.coreModel;
+                if (!coreModel || !coreModel.setParameterValueById) return;
+
+                // ── Pass 2: Emotion transition params ─────────────────────────
+                // NOTE: ANGLE/BODY/BREATH params are NOT written here.
+                // They are written via the 'beforeModelUpdate' event (see below),
+                // which fires right before model.update() (mesh deformation).
+                // Writing motion-class params after mesh deformation is invisible.
                 if (controller.transitionProgress < 1.0) {
                     const elapsed = performance.now() - controller.transitionStartTime;
                     controller.transitionProgress = Math.min(1.0, elapsed / TRANSITION_DURATION_MS);
                 }
                 const t = easeInOutCubic(controller.transitionProgress);
 
-                // Collect all param IDs from both start and target
                 const allParamIds = new Set([
                     ...Object.keys(controller.emotionParams),
                     ...Object.keys(controller.transitionStartValues)
                 ]);
 
-                if (allParamIds.size === 0) return;
-
-                const coreModel = this.coreModel;
-                if (!coreModel || !coreModel.setParameterValueById) return;
-
                 for (const paramId of allParamIds) {
                     const startVal = controller.transitionStartValues[paramId] ?? 0;
-                    const endVal = controller.emotionParams[paramId] ?? 0;
+                    const endVal   = controller.emotionParams[paramId] ?? 0;
+                    const value    = startVal + (endVal - startVal) * t;
 
-                    // Linearly interpolate with easing
-                    const value = startVal + (endVal - startVal) * t;
-
-                    // Store current value for next transition
                     controller.currentEmotionValues[paramId] = value;
 
-                    // Apply to core model
                     if (Math.abs(value) > 0.001 || Math.abs(endVal) > 0.001) {
-                        try {
-                            coreModel.setParameterValueById(paramId, value);
-                        } catch (e) { /* param not found on this model, skip */ }
+                        try { coreModel.setParameterValueById(paramId, value); } catch (e) { /* skip */ }
                     }
                 }
 
@@ -202,6 +204,30 @@ export class AvatarController {
                 }
             };
             console.log('[AvatarController] Patched model.internalModel.update for smooth emotion transitions');
+
+            // ── MotionEngine injection via beforeModelUpdate event ────────────
+            // pixi-live2d-display emits "beforeModelUpdate" right before
+            // coreModel.update() (mesh deformation). This is the ONLY safe
+            // window to write motion-class params (AngleX/Y/Z, BodyAngle,
+            // Breath) so they are actually baked into the deformed mesh.
+            // Using addParameterValueById (same API as pixi's own updateFocus)
+            // so our deltas stack on top of cursor + motion values.
+            newModel.internalModel.on('beforeModelUpdate', () => {
+                const coreModel = newModel.internalModel.coreModel;
+                if (!coreModel) return;
+
+                // BREATH — override pixi's sinusoidal breath with our organic version
+                for (const [paramId, val] of Object.entries(controller._meAbsolute)) {
+                    try { coreModel.setParameterValueById(paramId, val); } catch (e) { /* skip */ }
+                }
+
+                // Head/body micro-motion — additive on top of cursor + motion values
+                for (const [paramId, delta] of Object.entries(controller._meAdditive)) {
+                    if (Math.abs(delta) < 0.001) continue;
+                    try { coreModel.addParameterValueById(paramId, delta); } catch (e) { /* skip */ }
+                }
+            });
+            console.log('[AvatarController] Registered beforeModelUpdate hook for MotionEngine');
         }
 
         // Restart loop
@@ -243,7 +269,10 @@ export class AvatarController {
             }
         }
 
-        if (state !== 'RESPONDING') {
+        if (state === 'RESPONDING') {
+            // Anticipation micro-reaction fires just before speech starts
+            this.motionEngine.primeForSpeech();
+        } else {
             this.mouthSync.stop();
         }
     }
@@ -298,9 +327,10 @@ export class AvatarController {
                 this._startTransition(paramPreset);
             }
 
-            // Switch blink rhythm and gaze target to match this emotion
+            // Switch blink rhythm, gaze target, and motion signals
             this.idleAnimator.setBlinkProfile(label);
             this.gazeAnimator.setEmotion(label, intensity);
+            this.motionEngine.setEmotionSignals(label, intensity);
 
             // Update persistent mood baseline — dominant emotions accumulate across messages
             this._updateBaseline(label, intensity);
@@ -490,15 +520,17 @@ export class AvatarController {
             // True neutral — everything resets
             this.idleAnimator.setBlinkProfile(null);
             this.gazeAnimator.setEmotion(null);
+            this.motionEngine.resetToNeutral();
             this._startTransition({});
             return;
         }
 
-        // Subtle residual: gaze and blink at reduced intensity, no face params
+        // Subtle residual: gaze, blink, and motion signals at reduced intensity
         const residualIntensity = intensity * 0.35;
         console.log(`[AvatarController] Returning to baseline: ${label} @ ${residualIntensity.toFixed(2)} (residual)`);
         this.idleAnimator.setBlinkProfile(label);
         this.gazeAnimator.setEmotion(label, residualIntensity);
+        this.motionEngine.resetToNeutral(label, intensity);
         this._startTransition({}); // clear face params — face goes neutral
     }
 
@@ -633,18 +665,25 @@ export class AvatarController {
 
         // 2. Adjust Idle intensity based on emotions and states
         let idleIntensity = 1.0;
-        if (this.activeEmotion) idleIntensity = 0.5; // Reduce idle if emotional
+        if (this.activeEmotion) idleIntensity = 0.5;
 
+        // MotionEngine owns sway + breath — always disable them in IdleAnimator
+        // so the two systems don't fight over the same params.
         this.idleAnimator.setOverrides({
-            pauseIdleBlink: intentState.pauseIdleBlink,
-            pauseIdleSway: intentState.pauseIdleSway,
-            pauseIdleBreath: intentState.pauseIdleBreath
+            pauseIdleBlink:  intentState.pauseIdleBlink,
+            pauseIdleSway:   true,   // MotionEngine handles head/body motion
+            pauseIdleBreath: true,   // MotionEngine handles breathing
         }, idleIntensity);
 
-        // 3. Get Subsystem states
-        const idleState = this.idleAnimator.update(dt);
-        const gazeState = this.gazeAnimator.update(dt);
+        // 3. Update all subsystems
+        const idleState  = this.idleAnimator.update(dt);
+        const gazeState  = this.gazeAnimator.update(dt);
         const mouthState = this.mouthSync.update(dt);
+
+        // MotionEngine: populate _meAbsolute / _meAdditive for the monkey-patch
+        const meOut = this.motionEngine.update(dt);
+        this._meAbsolute = meOut.absolute;
+        this._meAdditive = meOut.additive;
 
         // 4. Blend Parameters
         const finalParams = {};

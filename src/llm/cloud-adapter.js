@@ -94,6 +94,87 @@ const CloudAdapter = {
     },
 
     /**
+     * Stream a response from Gemini via SSE, calling onChunk for each token batch.
+     * Resolves with the full accumulated text when done.
+     * @param {string} prompt
+     * @param {Object} options
+     * @param {function(string, string): void} onChunk - (newChunk, fullSoFar)
+     * @returns {Promise<string>}
+     */
+    async stream(prompt, options = {}, onChunk) {
+        const apiKey = getCloudApiKey();
+        if (!apiKey) throw new Error('Cloud API key not configured');
+
+        const systemPrompt = options.systemInstruction || DEFAULT_CONFIG.systemPrompt;
+        const controller   = new AbortController();
+        const timeoutId    = setTimeout(() => controller.abort(), DEFAULT_CONFIG.timeout);
+
+        const STREAM_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent';
+
+        try {
+            const response = await fetch(`${STREAM_ENDPOINT}?key=${apiKey}&alt=sse`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal,
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: MODEL_HARDENING_PREFIX + prompt }] }],
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    generationConfig: {
+                        maxOutputTokens: DEFAULT_CONFIG.maxTokens,
+                        temperature: DEFAULT_CONFIG.temperature,
+                        stopSequences: ['User:', 'Assistant:']
+                    }
+                })
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(`Cloud error: ${err?.error?.message || response.status}`);
+            }
+
+            const reader  = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = '';
+            let buffer   = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // hold back incomplete trailing line
+
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    const jsonStr = line.slice(6).trim();
+                    if (!jsonStr || jsonStr === '[DONE]') continue;
+                    try {
+                        const data  = JSON.parse(jsonStr);
+                        const chunk = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                        if (chunk) {
+                            fullText += chunk;
+                            onChunk?.(chunk, fullText);
+                        }
+                    } catch (_) { /* partial SSE line — skip */ }
+                }
+            }
+
+            return fullText.trim();
+
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') throw new Error('Cloud request timed out');
+            if (error.message.includes('fetch') || error.message.includes('network')) {
+                throw new Error('Cloud unreachable');
+            }
+            throw error;
+        }
+    },
+
+    /**
      * Check if Gemini API is reachable
      * @returns {Promise<boolean>}
      */

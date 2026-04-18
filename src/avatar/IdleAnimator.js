@@ -144,32 +144,46 @@ export class IdleAnimator {
             if (caps.hasBodyAngleX) state.parameters[PARAM_IDS.BODY_ANGLE_X] = swayValue * 0.5;
         }
 
-        // 3. Blinking
+        // 3. Blinking — with L/R asymmetry for organic feel
         if (caps.hasBlink && !this.pauseBlink) {
             this.state.blinkTimer += dt;
 
             if (this.state.isBlinking) {
-                const progress = this.state.blinkTimer / this._blinkDuration();
-                if (progress >= 1) {
-                    this.state.isBlinking = false;
-                    this.state.blinkTimer = 0;
+                const dur = this._blinkDuration();
+                // Left eye drives timing; right eye starts _rDelay seconds later
+                const lProg = Math.min(1, this.state.blinkTimer / dur);
+                const rProg = Math.min(1, Math.max(0,
+                    (this.state.blinkTimer - this.state._rDelay) / dur));
+
+                if (lProg >= 1 && rProg >= 1) {
+                    // Blink complete
+                    this.state.isBlinking   = false;
+                    this.state.blinkTimer   = 0;
                     this.state.nextBlinkTime = this._randomBlinkInterval();
                     state.parameters[PARAM_IDS.EYE_L_OPEN] = 1;
                     state.parameters[PARAM_IDS.EYE_R_OPEN] = 1;
                 } else {
-                    // Blink curve: close then open
-                    const eyeOpen = progress < 0.5
-                        ? 1 - (progress * 2)
-                        : (progress - 0.5) * 2;
-                    state.parameters[PARAM_IDS.EYE_L_OPEN] = eyeOpen;
-                    state.parameters[PARAM_IDS.EYE_R_OPEN] = eyeOpen;
+                    // Blink curve: close (first half) then open (second half)
+                    const eyeFromProg = (p) => p < 0.5 ? 1 - p * 2 : (p - 0.5) * 2;
+
+                    state.parameters[PARAM_IDS.EYE_L_OPEN] = eyeFromProg(lProg);
+
+                    // Occasional half-blink on right eye (8 % chance, set at blink start)
+                    if (this.state._halfBlinkR) {
+                        state.parameters[PARAM_IDS.EYE_R_OPEN] =
+                            0.45 + eyeFromProg(rProg) * 0.55;
+                    } else {
+                        state.parameters[PARAM_IDS.EYE_R_OPEN] = eyeFromProg(rProg);
+                    }
                 }
             } else if (this.state.blinkTimer >= this.state.nextBlinkTime) {
-                // start blink
-                this.state.isBlinking = true;
-                this.state.blinkTimer = 0;
+                // Start a new blink — randomise asymmetry for this blink
+                this.state.isBlinking  = true;
+                this.state.blinkTimer  = 0;
+                this.state._rDelay     = Math.random() * 0.035;   // 0–35 ms lag
+                this.state._halfBlinkR = Math.random() < 0.08;    // 8 % half-blink
             } else {
-                // ensure eyes open outside blink
+                // Eyes fully open between blinks
                 state.parameters[PARAM_IDS.EYE_L_OPEN] = 1;
                 state.parameters[PARAM_IDS.EYE_R_OPEN] = 1;
             }
