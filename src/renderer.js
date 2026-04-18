@@ -452,6 +452,7 @@ async function handleSubmit() {
 
         // 7. Update Memory (in background)
         memoryManager.addInteraction(query, responseObj.text);
+        memoryManager.recordInteractionSentiment(responseObj.emotionArc);
 
         StateMachine.transition(EVENTS.LLM_RESPONSE, responseObj);
     } catch (error) {
@@ -518,6 +519,7 @@ async function handleIdleMessage({ timeOfDay, timeContext, minutesSilent, messag
         // Log idle interaction to memory with a neutral placeholder so it reads
         // naturally in the next conversation's context window
         memoryManager.addInteraction('[quiet]', responseObj.text);
+        memoryManager.recordInteractionSentiment(responseObj.emotionArc);
 
         StateMachine.transition(EVENTS.LLM_RESPONSE, responseObj);
     } catch (error) {
@@ -593,6 +595,7 @@ async function handleStartupGreeting() {
 
         const responseObj = await BrainRouter.generate(greetPrompt, { systemInstruction });
         memoryManager.addInteraction('[app opened]', responseObj.text);
+        memoryManager.recordInteractionSentiment(responseObj.emotionArc);
         StateMachine.transition(EVENTS.LLM_RESPONSE, responseObj);
     } catch (error) {
         clearEmotionArcTimers();
