@@ -6,15 +6,14 @@
 
 import { VisionAdapter } from './VisionAdapter.js';
 
-const INTERVAL_MS   = 4 * 60 * 1000; // 4 minutes
-const DIFF_CANVAS_W = 160;
-const DIFF_CANVAS_H = 90;
-const DIFF_THRESHOLD = 0.06; // 6% pixel change triggers a new analysis
+const INTERVAL_MS    = 4 * 60 * 1000; // 4 minutes
+const DIFF_THRESHOLD = 0.04; // 4% character change triggers a new analysis
+const DIFF_SAMPLES   = 800;  // positions sampled from base64 string
 
 export class ScreenWatcher {
     constructor() {
         this._timer       = null;
-        this._lastDiffUrl = null;
+        this._lastBase64  = null;
         this._context     = { activity: null, shouldReact: false, reactionHint: null, timestamp: 0 };
         this._reactionConsumed = false;
     }
@@ -55,16 +54,16 @@ export class ScreenWatcher {
             const base64 = await window.electronAPI.captureScreen();
             if (!base64) return;
 
-            // Diff check — skip if screen looks the same
-            const diffUrl = await this._thumbnailDataUrl(base64);
-            if (diffUrl && this._lastDiffUrl) {
-                const changeRatio = this._roughDiff(this._lastDiffUrl, diffUrl);
+            // Diff check — sample the raw base64 string directly (no Image load,
+            // no CSP issues). JPEG base64 is deterministic enough for change detection.
+            if (this._lastBase64) {
+                const changeRatio = this._sampleDiff(this._lastBase64, base64);
                 if (changeRatio < DIFF_THRESHOLD) {
                     console.log('[ScreenWatcher] Screen unchanged, skipping VLM call');
                     return;
                 }
             }
-            this._lastDiffUrl = diffUrl;
+            this._lastBase64 = base64;
 
             console.log('[ScreenWatcher] Analysing screen...');
             const result = await VisionAdapter.analyzeScreen(base64);
@@ -77,31 +76,16 @@ export class ScreenWatcher {
         }
     }
 
-    /** Render base64 JPEG into a tiny canvas and return its data URL for diffing */
-    async _thumbnailDataUrl(base64Jpeg) {
-        return new Promise(resolve => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width  = DIFF_CANVAS_W;
-                canvas.height = DIFF_CANVAS_H;
-                canvas.getContext('2d').drawImage(img, 0, 0, DIFF_CANVAS_W, DIFF_CANVAS_H);
-                resolve(canvas.toDataURL('image/jpeg', 0.4));
-            };
-            img.onerror = () => resolve(null);
-            img.src = 'data:image/jpeg;base64,' + base64Jpeg;
-        });
-    }
-
-    /** Rough string-level diff between two data URLs — good enough for change detection */
-    _roughDiff(a, b) {
+    /** Sample DIFF_SAMPLES positions across two base64 strings and return change ratio */
+    _sampleDiff(a, b) {
         const len  = Math.max(a.length, b.length);
-        let diffs  = 0;
-        const step = Math.max(1, Math.floor(len / 500)); // sample 500 positions
+        const step = Math.max(1, Math.floor(len / DIFF_SAMPLES));
+        let diffs  = 0, total = 0;
         for (let i = 0; i < len; i += step) {
             if (a[i] !== b[i]) diffs++;
+            total++;
         }
-        return diffs / (len / step);
+        return diffs / total;
     }
 }
 

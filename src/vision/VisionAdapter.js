@@ -8,7 +8,7 @@
 import { getCloudApiKey } from '../settings.js';
 
 const GEMINI_VISION_ENDPOINT =
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 const SCREEN_PROMPT = `You are a passive observer describing a desktop screen for an AI companion.
 In 1 sentence describe what the user is doing (e.g. "writing code in VS Code", "watching a YouTube video", "browsing Reddit").
