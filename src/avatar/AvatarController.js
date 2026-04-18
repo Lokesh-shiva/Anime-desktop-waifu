@@ -181,9 +181,13 @@ export class AvatarController {
                 ]);
 
                 for (const paramId of allParamIds) {
-                    const startVal = controller.transitionStartValues[paramId] ?? 0;
-                    const endVal   = controller.emotionParams[paramId] ?? 0;
-                    const value    = startVal + (endVal - startVal) * t;
+                    const startVal   = controller.transitionStartValues[paramId] ?? 0;
+                    // Use param's natural resting value as the neutral target so
+                    // eye params (default 1.0) smoothly reopen on emotion decay
+                    // instead of closing toward 0 and blocking blinks.
+                    const defaultVal = controller._getParamDefault(paramId);
+                    const endVal     = controller.emotionParams[paramId] ?? defaultVal;
+                    const value      = startVal + (endVal - startVal) * t;
 
                     controller.currentEmotionValues[paramId] = value;
 
@@ -192,11 +196,12 @@ export class AvatarController {
                     }
                 }
 
-                // Clean up completed zero-value transitions
+                // Clean up transitions that have reached their neutral resting value
                 if (controller.transitionProgress >= 1.0) {
                     for (const paramId of Object.keys(controller.currentEmotionValues)) {
-                        if (Math.abs(controller.currentEmotionValues[paramId]) < 0.001 &&
-                            !(paramId in controller.emotionParams)) {
+                        const defaultVal = controller._getParamDefault(paramId);
+                        const atRest = Math.abs(controller.currentEmotionValues[paramId] - defaultVal) < 0.01;
+                        if (atRest && !(paramId in controller.emotionParams)) {
                             delete controller.currentEmotionValues[paramId];
                             delete controller.transitionStartValues[paramId];
                         }
