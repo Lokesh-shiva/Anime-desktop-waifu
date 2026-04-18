@@ -17,7 +17,9 @@ import {
     getOpenRouterApiKey,
     setOpenRouterApiKey,
     isScreenVisionEnabled,
-    isCameraVisionEnabled
+    setScreenVisionEnabled,
+    isCameraVisionEnabled,
+    setCameraVisionEnabled
 } from './settings.js';
 import { ScreenWatcher } from './vision/ScreenWatcher.js';
 import { CameraWatcher } from './vision/CameraWatcher.js';
@@ -841,6 +843,28 @@ function initSettings() {
     // Show ElevenLabs subgroup only when engine = elevenlabs and voice is on
     updateElevenLabsVisibility();
     updateCloudVisibility();
+
+    // Vision toggles
+    const screenVisionToggle = document.getElementById('screen-vision-toggle');
+    const cameraVisionToggle = document.getElementById('camera-vision-toggle');
+
+    if (screenVisionToggle) {
+        screenVisionToggle.checked = isScreenVisionEnabled();
+        screenVisionToggle.addEventListener('change', (e) => {
+            setScreenVisionEnabled(e.target.checked);
+            if (e.target.checked) screenWatcher.start();
+            else screenWatcher.stop();
+        });
+    }
+
+    if (cameraVisionToggle) {
+        cameraVisionToggle.checked = isCameraVisionEnabled();
+        cameraVisionToggle.addEventListener('change', async (e) => {
+            setCameraVisionEnabled(e.target.checked);
+            if (e.target.checked) await cameraWatcher.start();
+            else cameraWatcher.stop();
+        });
+    }
 }
 
 function updateElevenLabsVisibility() {
