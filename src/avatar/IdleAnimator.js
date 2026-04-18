@@ -69,6 +69,11 @@ export class IdleAnimator {
         this.pauseSway = false;
         this.pauseBreath = false;
         this.intensityMultiplier = 1.0;
+
+        // Blink params for the current frame — applied by the AvatarController
+        // monkey-patch (after originalUpdate) so they're never blocked by the
+        // emotion skip check and always run last in the pipeline.
+        this._lastBlinkParams = {};
     }
 
     /**
@@ -145,6 +150,10 @@ export class IdleAnimator {
         }
 
         // 3. Blinking — with L/R asymmetry for organic feel
+        // Eye values go into _lastBlinkParams (not state.parameters) so the
+        // AvatarController monkey-patch can apply them after the full Cubism
+        // pipeline, bypassing the emotion skip check entirely.
+        this._lastBlinkParams = {};
         if (caps.hasBlink && !this.pauseBlink) {
             this.state.blinkTimer += dt;
 
@@ -156,24 +165,22 @@ export class IdleAnimator {
                     (this.state.blinkTimer - this.state._rDelay) / dur));
 
                 if (lProg >= 1 && rProg >= 1) {
-                    // Blink complete
-                    this.state.isBlinking   = false;
-                    this.state.blinkTimer   = 0;
+                    // Blink complete — reset, eyes reopen next frame naturally (no write needed)
+                    this.state.isBlinking    = false;
+                    this.state.blinkTimer    = 0;
                     this.state.nextBlinkTime = this._randomBlinkInterval();
-                    state.parameters[PARAM_IDS.EYE_L_OPEN] = 1;
-                    state.parameters[PARAM_IDS.EYE_R_OPEN] = 1;
                 } else {
                     // Blink curve: close (first half) then open (second half)
                     const eyeFromProg = (p) => p < 0.5 ? 1 - p * 2 : (p - 0.5) * 2;
 
-                    state.parameters[PARAM_IDS.EYE_L_OPEN] = eyeFromProg(lProg);
+                    this._lastBlinkParams[PARAM_IDS.EYE_L_OPEN] = eyeFromProg(lProg);
 
                     // Occasional half-blink on right eye (8 % chance, set at blink start)
                     if (this.state._halfBlinkR) {
-                        state.parameters[PARAM_IDS.EYE_R_OPEN] =
+                        this._lastBlinkParams[PARAM_IDS.EYE_R_OPEN] =
                             0.45 + eyeFromProg(rProg) * 0.55;
                     } else {
-                        state.parameters[PARAM_IDS.EYE_R_OPEN] = eyeFromProg(rProg);
+                        this._lastBlinkParams[PARAM_IDS.EYE_R_OPEN] = eyeFromProg(rProg);
                     }
                 }
             } else if (this.state.blinkTimer >= this.state.nextBlinkTime) {
@@ -182,11 +189,8 @@ export class IdleAnimator {
                 this.state.blinkTimer  = 0;
                 this.state._rDelay     = Math.random() * 0.035;   // 0–35 ms lag
                 this.state._halfBlinkR = Math.random() < 0.08;    // 8 % half-blink
-            } else {
-                // Eyes fully open between blinks
-                state.parameters[PARAM_IDS.EYE_L_OPEN] = 1;
-                state.parameters[PARAM_IDS.EYE_R_OPEN] = 1;
             }
+            // Between blinks: no write — emotion system / library holds eyes at 1.0
         }
 
         return state;

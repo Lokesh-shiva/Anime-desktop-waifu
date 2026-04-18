@@ -207,6 +207,17 @@ export class AvatarController {
                         }
                     }
                 }
+
+                // ── Blink — always applied last, after all other pipeline writes ──
+                // IdleAnimator caches blink-frame eye values in _lastBlinkParams.
+                // Applying here guarantees we're never blocked by the emotion skip
+                // check in _onTick and that we run after loadParameters().
+                const blinkParams = controller.idleAnimator && controller.idleAnimator._lastBlinkParams;
+                if (blinkParams) {
+                    for (const [paramId, value] of Object.entries(blinkParams)) {
+                        try { coreModel.setParameterValueById(paramId, value); } catch (e) { /* skip */ }
+                    }
+                }
             };
             console.log('[AvatarController] Patched model.internalModel.update for smooth emotion transitions');
 
