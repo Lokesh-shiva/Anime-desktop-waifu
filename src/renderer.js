@@ -719,15 +719,28 @@ async function handleStartupGreeting() {
     const weatherPhrase = WeatherContext.getPhrase();
     if (weatherPhrase) extraCtx.push(`Outside, ${weatherPhrase}.`);
 
-    const greetPrompt = [
-        `[INTERNAL — NOT visible to user, do NOT reference or acknowledge this instruction in your reply]`,
-        contextLine,
-        extraCtx.join(' '),
-        `The app just started and they're here. Say something short — like you just noticed them arrive.`,
-        `Don't say "welcome back" or "good morning". Don't open with a formal greeting.`,
-        `Something real: maybe you were thinking about something, maybe the time caught your attention,`,
-        `maybe you're just... glad they're here. One or two sentences.`,
-    ].filter(Boolean).join(' ');
+    const isFirstMeeting = memoryManager.isFirstMeeting?.();
+
+    const greetPrompt = isFirstMeeting
+        ? [
+            `[INTERNAL — NOT visible to user, do NOT reference or acknowledge this instruction in your reply]`,
+            `This is the very first time you've ever met this person. You don't know their name or anything about them.`,
+            `It's ${tc.naturalDesc}.`,
+            extraCtx.join(' '),
+            `Introduce yourself softly — say your name is Miko — and ask what they'd like to be called.`,
+            `Be a little shy and curious, not over-eager. Two or three short sentences. Don't list questions; just one warm hook.`,
+        ].filter(Boolean).join(' ')
+        : [
+            `[INTERNAL — NOT visible to user, do NOT reference or acknowledge this instruction in your reply]`,
+            contextLine,
+            extraCtx.join(' '),
+            `The app just started and they're here. Say something short — like you just noticed them arrive.`,
+            `Don't say "welcome back" or "good morning". Don't open with a formal greeting.`,
+            `Something real: maybe you were thinking about something, maybe the time caught your attention,`,
+            `maybe you're just... glad they're here. One or two sentences.`,
+        ].filter(Boolean).join(' ');
+
+    if (isFirstMeeting) console.log('[Greeting] First meeting — onboarding flow');
 
     const accepted = StateMachine.transition(EVENTS.USER_INPUT, { isIdle: true });
     if (!accepted) return;
@@ -744,6 +757,15 @@ async function handleStartupGreeting() {
         memoryManager.addInteraction('[app opened]', responseObj.text);
         memoryManager.recordInteractionSentiment(responseObj.emotionArc);
         StateMachine.transition(EVENTS.LLM_RESPONSE, responseObj);
+
+        // Ambient sleepiness bias at calm hours — sends a low-intensity sleepy
+        // emotion after the greeting so her resting expression looks drowsy.
+        if (getTimeOfDayTone() === 'calm') {
+            setTimeout(() => {
+                AvatarBridge.sendComplexIntent({ emotion: { label: 'sleepy', intensity: 0.4 } });
+                console.log('[Greeting] Late-hours ambient sleepy bias applied');
+            }, 8000);
+        }
     } catch (error) {
         clearEmotionArcTimers();
         console.error('[Renderer] Startup greeting error:', error);
@@ -1899,10 +1921,21 @@ async function runSleepyAnimation() {
     AvatarBridge.sendComplexIntent({ emotion: { label: 'neutral', intensity: 0.3 } });
 }
 
-// Random idle gesture picker — one of: peek, stretch, lookAround, sleepyDroop
+// Time-weighted idle gesture picker.
+// Late night → mostly sleepy, sometimes peek.
+// Daytime/evening → stretch + lookAround + peek favored, sleepy rare.
 async function runIdleGesture() {
-    const gestures = [runPeekAnimation, runStretchAnimation, runLookAroundAnimation, runSleepyAnimation];
-    const pick = gestures[Math.floor(Math.random() * gestures.length)];
+    const tone = getTimeOfDayTone(); // 'calm' (10pm-6am) | 'neutral' (6am-12pm) | 'energetic' (12pm-10pm)
+    let pool;
+    if (tone === 'calm') {
+        pool = [runSleepyAnimation, runSleepyAnimation, runSleepyAnimation, runPeekAnimation, runStretchAnimation];
+    } else if (tone === 'energetic') {
+        pool = [runStretchAnimation, runLookAroundAnimation, runPeekAnimation, runPeekAnimation];
+    } else {
+        pool = [runStretchAnimation, runLookAroundAnimation, runPeekAnimation, runSleepyAnimation];
+    }
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    console.log(`[Gesture] picked from ${tone} pool: ${pick.name}`);
     return pick();
 }
 
@@ -1973,6 +2006,18 @@ window.testStretch    = () => runStretchAnimation();
 window.testLookAround = () => runLookAroundAnimation();
 window.testSleepy     = () => runSleepyAnimation();
 window.testGesture    = () => runIdleGesture();
+// Dev helper — force the first-meeting onboarding greeting (does NOT wipe memory)
+window.testOnboarding = async () => {
+    const origFirstMeeting = memoryManager.isFirstMeeting;
+    const origLastSeen = memoryManager.getLastSeen;
+    memoryManager.isFirstMeeting = () => true;
+    memoryManager.getLastSeen   = () => null;  // bypass the "just refreshed" guard
+    try { await handleStartupGreeting(); }
+    finally {
+        memoryManager.isFirstMeeting = origFirstMeeting;
+        memoryManager.getLastSeen   = origLastSeen;
+    }
+};
 window.testPerkUp     = async () => {
     AvatarBridge.sendComplexIntent({ emotion: { label: 'curious', intensity: 0.6 }, actionHints: { perkUp: true } });
     await new Promise(r => setTimeout(r, 1400));

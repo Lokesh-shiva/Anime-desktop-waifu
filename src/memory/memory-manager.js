@@ -132,6 +132,28 @@ class MemoryManager {
     }
 
     /**
+     * True when there's no recorded user name and no prior session — used by the
+     * onboarding flow to trigger a real "first meeting" greeting.
+     */
+    isFirstMeeting() {
+        return !this.lastSeen && !this.hasKnownName();
+    }
+
+    /**
+     * Returns the stored user name (if any), null otherwise.
+     */
+    getUserName() {
+        const fact = this.facts.find(f => /^User's name is /i.test(f.content));
+        if (!fact) return null;
+        const m = fact.content.match(/^User's name is (.+)$/i);
+        return m ? m[1].trim() : null;
+    }
+
+    hasKnownName() {
+        return !!this.getUserName();
+    }
+
+    /**
      * Load memory from disk with migration support
      */
     async _load() {
