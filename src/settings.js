@@ -250,8 +250,8 @@ export function setGroqSttApiKey(key) {
 
 // Available Gemini-family models (same generateContent API, different capabilities/quotas)
 export const GEMINI_MODELS = [
-    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', note: '20 RPD free' },
-    { id: 'gemma-4-27b-it',   label: 'Gemma 4 27B',      note: '1.5K RPD free' }
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', note: '20 RPD free — smartest' },
+    { id: 'gemma-3-27b-it',   label: 'Gemma 3 27B',      note: '1.5K RPD free — high quota' }
 ];
 
 export function getGeminiModel() {
