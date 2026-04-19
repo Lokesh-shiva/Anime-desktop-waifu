@@ -425,7 +425,7 @@ export class AvatarController {
                 }
                 // Track peerForward so cursor tracking releases ANGLE_Y/BODY_ANGLE_Y
                 // and the lean stays stable (no jitter from mouse movement on those axes).
-                this._peerForwardActive = !!intent.actionHints.peerForward;
+                this._peerForwardActive = !!(intent.actionHints.peerForward || intent.actionHints.stretch);
                 // Same idea for peek: lock the X-axis bend params from cursor noise.
                 this._peekActive = !!(intent.actionHints.peekLeft || intent.actionHints.peekRight);
             } else {
@@ -495,6 +495,22 @@ export class AvatarController {
             if (caps.hasHeadAngle)  overlay[PARAM_IDS.ANGLE_X]      = 24 * sign;
             if (caps.hasAngleZ)     overlay[PARAM_IDS.ANGLE_Z]      = 12 * sign;
             if (caps.hasEyeBallXY)  overlay[PARAM_IDS.EYE_BALL_X]   = 0.6 * sign;
+        }
+
+        // stretch → head tips back, body slight back, eyes look up (waking-up stretch)
+        if (hints.stretch) {
+            if (caps.hasHeadAngle)  overlay[PARAM_IDS.ANGLE_Y] = 18;
+            if (caps.hasBodyAngleY) overlay[PARAM_IDS.BODY_ANGLE_Y] = 6;
+            if (caps.hasEyeBallXY)  overlay[PARAM_IDS.EYE_BALL_Y] = 0.5;
+        }
+
+        // perkUp → quick subtle "I notice you" alert (eyes wide, slight head up)
+        // Used by typing reactor when user starts a new message after silence.
+        if (hints.perkUp) {
+            if (caps.hasHeadAngle)  overlay[PARAM_IDS.ANGLE_Y] = 6;
+            if (caps.hasEyeBallXY)  overlay[PARAM_IDS.EYE_BALL_Y] = 0.2;
+            if (this.registry.hasParam(PARAM_IDS.EYE_L_OPEN)) overlay[PARAM_IDS.EYE_L_OPEN] = 1.1;
+            if (this.registry.hasParam(PARAM_IDS.EYE_R_OPEN)) overlay[PARAM_IDS.EYE_R_OPEN] = 1.1;
         }
 
         // peerForward → head pitches down + body leans forward (toward screen)

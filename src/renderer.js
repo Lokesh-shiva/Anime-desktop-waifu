@@ -549,8 +549,8 @@ async function handleIdleMessage({ timeOfDay, timeContext, minutesSilent, messag
     console.log(`[Idle] Attention roll: ${roll.toFixed(2)} peek: ${peekRoll.toFixed(2)} force=${!!force} → ${doAttentionAnim ? 'CREEP ANIM' : doPeek ? 'PEEK (silent)' : 'normal message'}`);
 
     if (doPeek) {
-        await runPeekAnimation();
-        return;  // No LLM call — peek itself is the expression
+        await runIdleGesture();
+        return;  // No LLM call — gesture itself is the expression
     }
 
     // Internal trigger prompt — never shown in the chat bubble
@@ -1863,10 +1863,113 @@ async function runPeekAnimation() {
     AvatarBridge.sendComplexIntent({ emotion: { label: 'neutral', intensity: 0.3 } });
 }
 
+// Stretch — head tips back, body leans back, like a wake-up stretch
+async function runStretchAnimation() {
+    console.log('[Gesture] stretch');
+    AvatarBridge.sendComplexIntent({
+        emotion: { label: 'happy', intensity: 0.5 },
+        actionHints: { stretch: true },
+    });
+    await new Promise(r => setTimeout(r, 2800));
+    AvatarBridge.sendComplexIntent({ emotion: { label: 'neutral', intensity: 0.3 } });
+}
+
+// Look around — sequenced head turns L → R → forward, like she's bored and scanning
+async function runLookAroundAnimation() {
+    console.log('[Gesture] lookAround');
+    // Use peekLeft / peekRight as light versions by reusing the same lock mechanism
+    AvatarBridge.sendComplexIntent({
+        emotion: { label: 'curious', intensity: 0.4 },
+        actionHints: { peekLeft: true },
+    });
+    await new Promise(r => setTimeout(r, 1400));
+    AvatarBridge.sendComplexIntent({
+        emotion: { label: 'curious', intensity: 0.4 },
+        actionHints: { peekRight: true },
+    });
+    await new Promise(r => setTimeout(r, 1400));
+    AvatarBridge.sendComplexIntent({ emotion: { label: 'neutral', intensity: 0.3 } });
+}
+
+// Sleepy droop — uses the existing 'sleepy' emotion preset (eyes half-closed, head heavy)
+async function runSleepyAnimation() {
+    console.log('[Gesture] sleepyDroop');
+    AvatarBridge.sendComplexIntent({ emotion: { label: 'sleepy', intensity: 0.7 } });
+    await new Promise(r => setTimeout(r, 3500));
+    AvatarBridge.sendComplexIntent({ emotion: { label: 'neutral', intensity: 0.3 } });
+}
+
+// Random idle gesture picker — one of: peek, stretch, lookAround, sleepyDroop
+async function runIdleGesture() {
+    const gestures = [runPeekAnimation, runStretchAnimation, runLookAroundAnimation, runSleepyAnimation];
+    const pick = gestures[Math.floor(Math.random() * gestures.length)];
+    return pick();
+}
+
+// ── Typing reactor — Miko reacts visually to user typing in the chat box ──────
+const TypingReactor = {
+    _lastKeyTime: 0,
+    _lastReactionTime: 0,
+    _pauseTimer: null,
+    REACT_COOLDOWN_MS: 8000,   // don't repeat reactions too quickly
+    QUIET_THRESHOLD_MS: 25000, // typing after this much silence = "perk up"
+    PAUSE_MS: 1800,            // mid-typing pause length to trigger curious tilt
+
+    onKey() {
+        const now  = Date.now();
+        const sinceLast = now - this._lastKeyTime;
+        const sinceReact = now - this._lastReactionTime;
+        this._lastKeyTime = now;
+
+        // Perk up when typing resumes after a long quiet period
+        if (sinceLast > this.QUIET_THRESHOLD_MS && sinceReact > this.REACT_COOLDOWN_MS) {
+            console.log('[TypingReactor] perk up — user started typing after silence');
+            AvatarBridge.sendComplexIntent({
+                emotion: { label: 'curious', intensity: 0.5 },
+                actionHints: { perkUp: true },
+            });
+            this._lastReactionTime = now;
+        }
+
+        // Reset the pause timer — fires if user stops typing mid-message
+        if (this._pauseTimer) clearTimeout(this._pauseTimer);
+        this._pauseTimer = setTimeout(() => this._onPause(), this.PAUSE_MS);
+    },
+
+    _onPause() {
+        const now = Date.now();
+        if (now - this._lastReactionTime < this.REACT_COOLDOWN_MS) return;
+        // Only react if there's still text in the input (user is mid-thought, not done)
+        const input = document.getElementById('user-input');
+        if (!input || !input.value.trim()) return;
+        console.log('[TypingReactor] curious tilt — user paused mid-typing');
+        AvatarBridge.sendComplexIntent({
+            emotion: { label: 'curious', intensity: 0.45 },
+            actionHints: { shy: true },  // gentle head tilt via existing shy hint
+        });
+        this._lastReactionTime = now;
+    },
+
+    onSubmitOrClear() {
+        if (this._pauseTimer) { clearTimeout(this._pauseTimer); this._pauseTimer = null; }
+    },
+};
+// Hook into the existing keydown listener — it's already on userInput
+userInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { TypingReactor.onSubmitOrClear(); return; }
+    TypingReactor.onKey();
+});
+
 // Dev helper — type testAttention() in the DevTools console to force the lean-in sequence
 window.testAttention = () => handleIdleMessage({ minutesSilent: 5, messageCount: 99, timeOfDay: getTimeOfDayTone(), timeContext: getRichTimeContext(), force: true });
 // Dev helper — type testPeek() in the DevTools console to force the silent body-bend peek
 window.testPeek = () => runPeekAnimation();
+// Dev helpers for the other idle gestures
+window.testStretch    = () => runStretchAnimation();
+window.testLookAround = () => runLookAroundAnimation();
+window.testSleepy     = () => runSleepyAnimation();
+window.testGesture    = () => runIdleGesture();
+window.testPerkUp     = () => AvatarBridge.sendComplexIntent({ emotion: { label: 'curious', intensity: 0.5 }, actionHints: { perkUp: true } });
 
 // Listen for Capabilities
 if (window.electronAPI && window.electronAPI.onAvatarCapabilities) {
