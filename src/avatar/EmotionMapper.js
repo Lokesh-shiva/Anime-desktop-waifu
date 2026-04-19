@@ -504,26 +504,68 @@ export class EmotionMapper {
         // rich overlay set (star eyes, blush, sweat, question, dizzy, etc.)
         const family = this.registry?.getCapabilities?.().modelFamily;
         if (family === 'alexia') {
-            const stripped = {};
-            const ELF_ONLY = new Set([
-                PARAM_IDS.ELF_EAR, PARAM_IDS.ELF_EAR_WAVE,
-                PARAM_IDS.HAPPY_VIS, PARAM_IDS.ANGER_VIS, PARAM_IDS.HATE_VIS,
-                PARAM_IDS.SWEAT_VIS, PARAM_IDS.TONGUE_VIS, PARAM_IDS.BERO,
-                PARAM_IDS.SKIRT_EXPAND
-            ]);
-            for (const [k, v] of Object.entries(preset)) {
-                if (!ELF_ONLY.has(k)) stripped[k] = v;
+            // Some emotions need completely different base values on Alexia because
+            // ELF preset values translate poorly to her rig (e.g. EYE_SMILE fighting
+            // EYE_OPEN on sleepy, or symmetric eyes undermining smug's knowing look).
+            // These replace the ELF stripped base entirely for those labels.
+            const P = PARAM_IDS;
+            const ALEXIA_SPECIFIC_BASES = {
+                sleepy: {
+                    // Pure heavy-lidded tired look — no EYE_SMILE fighting the droop
+                    [P.EYE_L_OPEN]:   0.12,   // barely open
+                    [P.EYE_R_OPEN]:   0.08,   // right even more closed (asymmetric)
+                    [P.EYE_L_SMILE]:  0,
+                    [P.EYE_R_SMILE]:  0,
+                    [P.MOUTH_OPEN_Y]: 0.25,   // lethargic slack jaw
+                    [P.MOUTH_FORM]:  -0.15,   // corners slightly down — tired not happy
+                    [P.BROW_L_Y]:    -0.5,
+                    [P.BROW_R_Y]:    -0.5,
+                    [P.ANGLE_Y]:     -12,     // head drooping forward
+                    [P.ANGLE_Z]:     -10,
+                },
+                smug: {
+                    // Asymmetric knowing look — one lidded eye, one raised arch brow
+                    [P.EYE_L_OPEN]:   0.45,   // left eye heavy-lidded
+                    [P.EYE_R_OPEN]:   0.72,
+                    [P.EYE_L_SMILE]:  0.35,   // soft smug squint (at cap)
+                    [P.EYE_R_SMILE]:  0.10,
+                    [P.MOUTH_FORM]:   0.50,   // half-smile
+                    [P.BROW_L_Y]:     0.85,   // arched raised brow — the smug tell
+                    [P.BROW_R_Y]:    -0.35,
+                    [P.BROW_L_ANGLE]: 0.30,   // arch shape
+                    [P.ANGLE_X]:      6,
+                    [P.ANGLE_Z]:      5,
+                },
+            };
+
+            let alexiaBase;
+            if (ALEXIA_SPECIFIC_BASES[label]) {
+                // Use Alexia-tuned base directly — skip ELF stripping
+                alexiaBase = { ...ALEXIA_SPECIFIC_BASES[label] };
+            } else {
+                // Strip ELF-specific overlays from shared preset
+                const stripped = {};
+                const ELF_ONLY = new Set([
+                    P.ELF_EAR, P.ELF_EAR_WAVE,
+                    P.HAPPY_VIS, P.ANGER_VIS, P.HATE_VIS,
+                    P.SWEAT_VIS, P.TONGUE_VIS, P.BERO,
+                    P.SKIRT_EXPAND
+                ]);
+                for (const [k, v] of Object.entries(preset)) {
+                    if (!ELF_ONLY.has(k)) stripped[k] = v;
+                }
+                // Cap EYE_L/R_SMILE to 0.35 — higher values produce an unnatural
+                // creepy grin on Alexia's art style
+                const SMILE_CAP = 0.35;
+                if (stripped[P.EYE_L_SMILE] > SMILE_CAP) stripped[P.EYE_L_SMILE] = SMILE_CAP;
+                if (stripped[P.EYE_R_SMILE] > SMILE_CAP) stripped[P.EYE_R_SMILE] = SMILE_CAP;
+                // Also cap MOUTH_FORM — her mouth rig is more expressive
+                if (stripped[P.MOUTH_FORM] > 0.6) stripped[P.MOUTH_FORM] = 0.6;
+                alexiaBase = stripped;
             }
-            // Cap EYE_L/R_SMILE to 0.35 on Alexia — higher values produce an
-            // unnatural creepy grin on her art style. Alexia's Param51/52 overlay
-            // (EYE_SQUINT) handles the "happy eyes" effect instead.
-            const SMILE_CAP = 0.35;
-            if (stripped[PARAM_IDS.EYE_L_SMILE] > SMILE_CAP) stripped[PARAM_IDS.EYE_L_SMILE] = SMILE_CAP;
-            if (stripped[PARAM_IDS.EYE_R_SMILE] > SMILE_CAP) stripped[PARAM_IDS.EYE_R_SMILE] = SMILE_CAP;
-            // Also cap MOUTH_FORM — her mouth rig is more expressive; full 1.0 looks jarring
-            if (stripped[PARAM_IDS.MOUTH_FORM] > 0.6) stripped[PARAM_IDS.MOUTH_FORM] = 0.6;
+
             const alexiaLayer = this._alexiaOverlayFor(label);
-            preset = { ...stripped, ...alexiaLayer };
+            preset = { ...alexiaBase, ...alexiaLayer };
         }
 
         // Overlay/visibility params are binary switches — they must reach their
