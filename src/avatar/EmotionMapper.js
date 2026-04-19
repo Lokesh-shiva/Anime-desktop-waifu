@@ -570,7 +570,7 @@ export class EmotionMapper {
             crying:      { [A.ALEXIA_CRY]: V, [A.ALEXIA_BLUSH]: V },
             sad:         { [A.ALEXIA_CRY]: V },
             melancholic: { [A.ALEXIA_SWEAT]: V },
-            playful:     { [A.ALEXIA_TONGUE]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            playful:     { [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
             anger:       { [A.ALEXIA_ANGRY]: V },
             angry:       { [A.ALEXIA_ANGRY]: V },
             dark:        { [A.ALEXIA_ANGRY]: V },

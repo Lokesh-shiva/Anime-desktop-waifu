@@ -193,9 +193,14 @@ export class AvatarController {
                     'Param51','Param52','Param55','Param56','Param57','Param58','Param59'];
                 if (controller.registry?.getCapabilities?.().modelFamily === 'alexia') {
                     for (const paramId of ALEXIA_OVERLAYS_ALL) {
+                        // Mouth overlays (tongue) must be ACTIVELY zeroed during speech —
+                        // not just skipped. Skipping left the tongue visible if it had been
+                        // set before TTS started. Zero it every frame while speaking.
+                        if (isSpeaking && MOUTH_OVERLAYS.has(paramId)) {
+                            try { coreModel.setParameterValueById(paramId, 0); } catch (e) {}
+                            continue;
+                        }
                         if (!(paramId in controller.emotionParams)) {
-                            // Skip mouth overlays during TTS even in this zero-pass
-                            if (isSpeaking && MOUTH_OVERLAYS.has(paramId)) continue;
                             try { coreModel.setParameterValueById(paramId, 0); } catch (e) {}
                         }
                     }
