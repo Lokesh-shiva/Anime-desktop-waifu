@@ -252,7 +252,7 @@ export function setGroqSttApiKey(key) {
 export const GEMINI_MODELS = [
     { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', note: '20 RPD free — smartest' },
     { id: 'gemma-3-27b-it',   label: 'Gemma 3 27B',      note: '1.5K RPD free — high quota' },
-    { id: 'gemma-4-27b-it',   label: 'Gemma 4 27B',      note: '1.5K RPD free — newest' }
+    { id: 'gemma-4-26b-it',   label: 'Gemma 4 26B',      note: '1.5K RPD free — newest' }
 ];
 
 export function getGeminiModel() {
