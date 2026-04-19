@@ -220,11 +220,12 @@ export class AvatarController {
                     const endVal     = controller.emotionParams[paramId] ?? defaultVal;
                     const value      = startVal + (endVal - startVal) * t;
 
+                    // Track interpolated value — beforeModelUpdate reads this each frame
+                    // to write params at the correct time (after motion pipeline, before
+                    // mesh deformation). Do NOT write to coreModel here: deformation has
+                    // already happened inside originalUpdate, and double-writing causes
+                    // a 1-frame flicker (jitter) on emotion changes and blinks.
                     controller.currentEmotionValues[paramId] = value;
-
-                    if (Math.abs(value) > 0.001 || Math.abs(endVal) > 0.001) {
-                        try { coreModel.setParameterValueById(paramId, value); } catch (e) { /* skip */ }
-                    }
                 }
 
                 // Clean up transitions that have reached their neutral resting value
@@ -270,6 +271,23 @@ export class AvatarController {
                 // so our writes here are what actually bakes into the rendered mesh.
                 const bmIsSpeaking = controller.mouthSync?.isActive?.();
                 const BM_MOUTH_OVERLAYS = new Set(['Param46']);
+
+                // Alexia overlay zero-pass — must run here (before deformation) so the
+                // expression pipeline can't leak Add-blend overlays into the rendered mesh.
+                const BM_ALEXIA_OVERLAYS_ALL = ['Param21','Param43','Param44','Param46',
+                    'Param51','Param52','Param55','Param56','Param57','Param58','Param59','Param60'];
+                if (controller.registry?.getCapabilities?.().modelFamily === 'alexia') {
+                    for (const paramId of BM_ALEXIA_OVERLAYS_ALL) {
+                        if (bmIsSpeaking && BM_MOUTH_OVERLAYS.has(paramId)) {
+                            try { coreModel.setParameterValueById(paramId, 0); } catch (e) {}
+                            continue;
+                        }
+                        if (!(paramId in controller.emotionParams)) {
+                            try { coreModel.setParameterValueById(paramId, 0); } catch (e) {}
+                        }
+                    }
+                }
+
                 for (const [paramId, val] of Object.entries(controller.currentEmotionValues)) {
                     if (bmIsSpeaking && BM_MOUTH_OVERLAYS.has(paramId)) continue;
                     try { coreModel.setParameterValueById(paramId, val); } catch (e) { /* skip */ }
