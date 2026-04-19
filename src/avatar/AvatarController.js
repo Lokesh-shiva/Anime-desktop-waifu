@@ -246,7 +246,20 @@ export class AvatarController {
                 const blinkParams = controller.idleAnimator && controller.idleAnimator._lastBlinkParams;
                 if (blinkParams) {
                     for (const [paramId, value] of Object.entries(blinkParams)) {
-                        try { coreModel.setParameterValueById(paramId, value); } catch (e) { /* skip */ }
+                        // If the emotion explicitly sets an EYE_OPEN value (e.g. sleepy=0.04,
+                        // smug asymmetry), blink FROM that baseline instead of 1.0.
+                        // Without this, every blink flashes the eyes fully open before closing,
+                        // destroying the sleepy look and breaking asymmetric smug eyes.
+                        const isEyeOpen = paramId === 'ParamEyeLOpen' || paramId === 'ParamEyeROpen';
+                        if (isEyeOpen && (paramId in controller.emotionParams)) {
+                            // value is 0→1 (blink curve). Remap to baseline→0→baseline.
+                            const baseline = controller.currentEmotionValues[paramId]
+                                          ?? controller.emotionParams[paramId]
+                                          ?? 1.0;
+                            try { coreModel.setParameterValueById(paramId, value * baseline); } catch (e) { /* skip */ }
+                        } else {
+                            try { coreModel.setParameterValueById(paramId, value); } catch (e) { /* skip */ }
+                        }
                     }
                 }
             };
@@ -268,7 +281,24 @@ export class AvatarController {
                     try { coreModel.setParameterValueById(paramId, val); } catch (e) { /* skip */ }
                 }
 
-                // Head/body micro-motion — additive on top of cursor + motion values
+                // EMOTION ANGLE OVERRIDE — must happen here (after motion pipeline,
+                // before coreModel.update/mesh deformation). Writing ANGLE params in
+                // the post-originalUpdate monkey-patch is too late — the mesh has
+                // already been deformed using the idle motion's angle values.
+                // By writing here we override the motion's ANGLE values so the emotion
+                // head pose (smug head-back, sleepy droop, playful tilt) actually bakes in.
+                // MotionEngine additive sway is then stacked ON TOP for organic movement.
+                const ANGLE_PARAMS = new Set([
+                    'ParamAngleX','ParamAngleY','ParamAngleZ',
+                    'ParamBodyAngleX','ParamBodyAngleY','ParamBodyAngleZ'
+                ]);
+                for (const [paramId, val] of Object.entries(controller.currentEmotionValues)) {
+                    if (!ANGLE_PARAMS.has(paramId)) continue;
+                    if (Math.abs(val) < 0.001) continue;
+                    try { coreModel.setParameterValueById(paramId, val); } catch (e) { /* skip */ }
+                }
+
+                // Head/body micro-motion — additive on top of the emotion angle above
                 for (const [paramId, delta] of Object.entries(controller._meAdditive)) {
                     if (Math.abs(delta) < 0.001) continue;
                     try { coreModel.addParameterValueById(paramId, delta); } catch (e) { /* skip */ }
