@@ -1052,7 +1052,165 @@ if (quitBtn) {
             btn.classList.add('active');
             const target = document.getElementById(btn.dataset.tab);
             if (target) target.classList.add('active');
+            if (btn.dataset.tab === 'tab-memory') initMemoryTab();
         });
+    });
+}
+
+// ── Memory Tab ────────────────────────────────────────────────────────────────
+function initMemoryTab() {
+    const mm = window.memoryManager;
+    if (!mm) return;
+
+    // ── Mood bar ──
+    const thumb = document.getElementById('mem-mood-thumb');
+    const moodLabel = document.getElementById('mem-mood-label');
+    const moodTime  = document.getElementById('mem-mood-time');
+    if (thumb && mm.mood) {
+        // mood.value is in range [-1, 1]; map to 0–100%
+        const pct = Math.round(((mm.mood.value + 1) / 2) * 100);
+        thumb.style.left = `${pct}%`;
+        if (moodLabel) moodLabel.textContent = mm.mood.label || 'content';
+        if (moodTime && mm.mood.lastUpdated) {
+            const ago = Date.now() - mm.mood.lastUpdated;
+            const mins = Math.floor(ago / 60000);
+            const hrs  = Math.floor(ago / 3600000);
+            if (hrs > 0)       moodTime.textContent = `${hrs}h ago`;
+            else if (mins > 0) moodTime.textContent = `${mins}m ago`;
+            else               moodTime.textContent = 'just now';
+        }
+    }
+
+    // ── Session summary ──
+    const summaryEl = document.getElementById('mem-summary-text');
+    if (summaryEl) {
+        summaryEl.textContent = mm.sessionSummary?.trim() || 'Nothing summarised yet this session.';
+    }
+
+    // ── Facts ──
+    renderMemoryFacts();
+
+    // ── Previous sessions ──
+    const prevSection = document.getElementById('mem-prev-section');
+    const prevList    = document.getElementById('mem-prev-list');
+    const prevToggle  = document.getElementById('mem-prev-toggle');
+    if (prevSection && prevList && Array.isArray(mm.previousSessions) && mm.previousSessions.length) {
+        prevSection.style.display = '';
+        prevList.innerHTML = '';
+        // Show newest first
+        [...mm.previousSessions].reverse().forEach((s, i) => {
+            const item = document.createElement('div');
+            item.className = 'mem-prev-item';
+            item.dataset.index = `#${mm.previousSessions.length - i}`;
+            item.textContent = s;
+            prevList.appendChild(item);
+        });
+        if (prevToggle) {
+            prevToggle.onclick = () => {
+                const open = prevList.style.display !== 'none';
+                prevList.style.display = open ? 'none' : '';
+                prevToggle.textContent = open ? '▼' : '▲';
+            };
+        }
+    } else if (prevSection) {
+        prevSection.style.display = 'none';
+    }
+
+    // ── Refresh button ──
+    const refreshBtn = document.getElementById('mem-refresh-btn');
+    if (refreshBtn) refreshBtn.onclick = () => initMemoryTab();
+
+    // ── Clear all ──
+    const clearBtn = document.getElementById('mem-clear-btn');
+    if (clearBtn) {
+        clearBtn.onclick = () => {
+            if (!confirm('Clear all memories? This cannot be undone.')) return;
+            mm.facts            = [];
+            mm.sessionSummary   = '';
+            mm.previousSessions = [];
+            mm.mood             = { value: 0.0, label: 'content', lastUpdated: Date.now() };
+            mm._save?.();      // save if method exists
+            initMemoryTab();   // re-render
+        };
+    }
+}
+
+function renderMemoryFacts() {
+    const mm        = window.memoryManager;
+    const container = document.getElementById('mem-facts-container');
+    if (!container || !mm) return;
+    container.innerHTML = '';
+
+    const facts = Array.isArray(mm.facts) ? mm.facts : [];
+    if (!facts.length) {
+        container.innerHTML = '<p class="mem-empty">No memories yet.</p>';
+        return;
+    }
+
+    // Group by category
+    const groups = {};
+    facts.forEach(f => {
+        const cat = f.category || 'other';
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(f);
+    });
+
+    const catOrder = ['identity', 'preferences', 'projects', 'constraints', 'other'];
+    const catNames = { identity: 'Identity', preferences: 'Preferences', projects: 'Projects', constraints: 'Constraints', other: 'Other' };
+
+    catOrder.forEach(cat => {
+        if (!groups[cat]) return;
+        const section = document.createElement('div');
+        section.className = 'mem-category';
+
+        const label = document.createElement('div');
+        label.className = 'mem-category-label';
+        label.textContent = catNames[cat] || cat;
+        section.appendChild(label);
+
+        groups[cat].forEach(fact => {
+            const row = document.createElement('div');
+            row.className = 'mem-fact';
+
+            const body = document.createElement('div');
+            body.className = 'mem-fact-body';
+
+            const text = document.createElement('div');
+            text.className = 'mem-fact-text';
+            text.textContent = fact.content;
+            body.appendChild(text);
+
+            const confWrap = document.createElement('div');
+            confWrap.className = 'mem-conf-wrap';
+            const confBar = document.createElement('div');
+            confBar.className = 'mem-conf-bar';
+            const confFill = document.createElement('div');
+            confFill.className = 'mem-conf-fill';
+            const conf = typeof fact.confidence === 'number' ? fact.confidence : 0.5;
+            confFill.style.width = `${Math.round(conf * 100)}%`;
+            confBar.appendChild(confFill);
+            const confNum = document.createElement('div');
+            confNum.className = 'mem-conf-num';
+            confNum.textContent = `${Math.round(conf * 100)}%`;
+            confWrap.appendChild(confBar);
+            confWrap.appendChild(confNum);
+            body.appendChild(confWrap);
+            row.appendChild(body);
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'mem-delete-btn';
+            delBtn.title = 'Forget this';
+            delBtn.textContent = '×';
+            delBtn.onclick = () => {
+                window.memoryManager.facts = window.memoryManager.facts.filter(f => f.id !== fact.id);
+                window.memoryManager._save?.();
+                renderMemoryFacts();
+            };
+            row.appendChild(delBtn);
+            section.appendChild(row);
+        });
+
+        container.appendChild(section);
     });
 }
 

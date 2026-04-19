@@ -91,6 +91,7 @@
       <button class="tab-btn active" data-tab="tab-ai">AI</button>
       <button class="tab-btn" data-tab="tab-voice">Voice</button>
       <button class="tab-btn" data-tab="tab-avatar">Avatar</button>
+      <button class="tab-btn" data-tab="tab-memory">Memory</button>
       <button class="tab-btn" data-tab="tab-debug">Debug</button>
     </div>
 
@@ -285,6 +286,56 @@
         </div>
 
       </div><!-- /tab-debug -->
+
+      <!-- ── Memory Tab ── -->
+      <div id="tab-memory" class="tab-pane">
+
+        <!-- Mood -->
+        <div class="setting-section">
+          <div class="section-label">Mood</div>
+          <div class="mood-bar-wrap">
+            <div class="mood-bar-track">
+              <div id="mem-mood-thumb" class="mood-bar-thumb"></div>
+            </div>
+            <div class="mood-meta">
+              <span id="mem-mood-label" class="mood-label">content</span>
+              <span id="mem-mood-time"  class="mood-time">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Session summary -->
+        <div class="setting-section">
+          <div class="section-label">This Session</div>
+          <p id="mem-summary-text" class="mem-summary-text">—</p>
+        </div>
+
+        <!-- Facts -->
+        <div class="setting-section">
+          <div class="section-label-row">
+            <span class="section-label" style="margin:0">What Miko Knows</span>
+            <button id="mem-refresh-btn" class="mem-icon-btn" title="Refresh">↻</button>
+          </div>
+          <div id="mem-facts-container">
+            <p class="mem-empty">No memories yet.</p>
+          </div>
+        </div>
+
+        <!-- Previous sessions -->
+        <div class="setting-section" id="mem-prev-section" style="display:none">
+          <div class="section-label-row">
+            <span class="section-label" style="margin:0">Previous Sessions</span>
+            <button id="mem-prev-toggle" class="mem-icon-btn">▼</button>
+          </div>
+          <div id="mem-prev-list" class="mem-prev-list" style="display:none"></div>
+        </div>
+
+        <!-- Danger zone -->
+        <div class="setting-section">
+          <button id="mem-clear-btn" class="mem-clear-btn">Clear All Memories</button>
+        </div>
+
+      </div><!-- /tab-memory -->
 
     </div><!-- /tab-body -->
 
