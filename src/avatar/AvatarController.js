@@ -183,14 +183,17 @@ export class AvatarController {
                 // Alexia overlay params that affect the mouth rig — skip during TTS
                 // so they don't fight ParamMouthOpenY lip sync animation
                 const isSpeaking = controller.mouthSync?.isActive?.();
-                const MOUTH_OVERLAYS = new Set(['Param46']); // TONGUE
+                // Param46 = TONGUE (hidden during speech), Param20 = MOUTH_SKEW
+                // (skew zeroed during speech so lip sync isn't tilted)
+                const MOUTH_OVERLAYS = new Set(['Param46', 'Param20']);
 
                 // On Alexia: actively zero every overlay NOT in the current emotion
                 // every frame. Once a param is cleaned out of currentEmotionValues,
                 // the Cubism expression/motion pipeline can quietly restore it to a
                 // non-zero value and nothing would counter it. This suppresses that.
+                // Param60 = BIG_SMILE — Add-blend binary, must be zeroed like others.
                 const ALEXIA_OVERLAYS_ALL = ['Param21','Param43','Param44','Param46',
-                    'Param51','Param52','Param55','Param56','Param57','Param58','Param59'];
+                    'Param51','Param52','Param55','Param56','Param57','Param58','Param59','Param60'];
                 if (controller.registry?.getCapabilities?.().modelFamily === 'alexia') {
                     for (const paramId of ALEXIA_OVERLAYS_ALL) {
                         // Mouth overlays (tongue) must be ACTIVELY zeroed during speech —
@@ -607,7 +610,7 @@ export class AvatarController {
         // bleed visually into the next emotion (e.g. grin lingering into embarrassed).
         const ALEXIA_OVERLAYS = new Set([
             'Param21','Param43','Param44','Param46',
-            'Param51','Param52','Param55','Param56','Param57','Param58','Param59'
+            'Param51','Param52','Param55','Param56','Param57','Param58','Param59','Param60'
         ]);
 
         this.transitionStartValues = {};

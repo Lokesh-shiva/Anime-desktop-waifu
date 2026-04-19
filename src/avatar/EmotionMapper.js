@@ -522,8 +522,15 @@ export class EmotionMapper {
             if (stripped[PARAM_IDS.EYE_R_SMILE] > SMILE_CAP) stripped[PARAM_IDS.EYE_R_SMILE] = SMILE_CAP;
             // Also cap MOUTH_FORM — her mouth rig is more expressive; full 1.0 looks jarring
             if (stripped[PARAM_IDS.MOUTH_FORM] > 0.6) stripped[PARAM_IDS.MOUTH_FORM] = 0.6;
+            // Alexia-specific continuous param overrides — not binary overlays but
+            // improve expression fidelity using her unique rig params
+            const ALEXIA_BASE_OVERRIDES = {
+                smug:    { [PARAM_IDS.ALEXIA_MOUTH_SKEW]: 0.65 }, // cocky asymmetric mouth tilt
+                playful: { [PARAM_IDS.ALEXIA_MOUTH_SKEW]: 0.35 }, // cheeky subtle skew
+            };
+            const alexiaBaseOverrides = ALEXIA_BASE_OVERRIDES[label] || {};
             const alexiaLayer = this._alexiaOverlayFor(label);
-            preset = { ...stripped, ...alexiaLayer };
+            preset = { ...stripped, ...alexiaBaseOverrides, ...alexiaLayer };
         }
 
         // Overlay/visibility params are binary switches — they must reach their
@@ -539,7 +546,7 @@ export class EmotionMapper {
             PARAM_IDS.ALEXIA_STAR_EYES, PARAM_IDS.ALEXIA_DIZZY,
             PARAM_IDS.ALEXIA_ANGRY, PARAM_IDS.ALEXIA_BLUSH, PARAM_IDS.ALEXIA_CRY,
             PARAM_IDS.ALEXIA_EYE_SQUINT_L, PARAM_IDS.ALEXIA_EYE_SQUINT_R,
-            PARAM_IDS.ALEXIA_CHEEK_PUFF
+            PARAM_IDS.ALEXIA_CHEEK_PUFF, PARAM_IDS.ALEXIA_BIG_SMILE
         ]);
 
         const scaled = {};
@@ -560,31 +567,39 @@ export class EmotionMapper {
         // TONGUE (Param46) = tongue out — only for playful (genuinely cheeky moment).
         // Warm emotions (happy, love, excited, grateful) use eye squints only — natural soft look.
         const map = {
-            happy:       { [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
-            love:        { [A.ALEXIA_STAR_EYES]: V, [A.ALEXIA_BLUSH]: V },
-            excited:     { [A.ALEXIA_STAR_EYES]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            // ── Warm / positive ────────────────────────────────────────────────
+            happy:       { [A.ALEXIA_BIG_SMILE]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            excited:     { [A.ALEXIA_BIG_SMILE]: V, [A.ALEXIA_STAR_EYES]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            love:        { [A.ALEXIA_STAR_EYES]: V, [A.ALEXIA_BLUSH]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            grateful:    { [A.ALEXIA_BIG_SMILE]: V, [A.ALEXIA_BLUSH]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            // ── Soft / tender ──────────────────────────────────────────────────
+            tender:      { [A.ALEXIA_BLUSH]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            kind:        { [A.ALEXIA_BLUSH]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            calm:        { [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            longing:     { [A.ALEXIA_BLUSH]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            // ── Cheeky / smug ──────────────────────────────────────────────────
+            smug:        { [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V }, // mouth_skew injected via base overrides
+            playful:     { [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V }, // mouth_skew injected via base overrides
+            // ── Nervous / embarrassed ──────────────────────────────────────────
             embarrassed: { [A.ALEXIA_SWEAT]: V, [A.ALEXIA_BLUSH]: V },
             flustered:   { [A.ALEXIA_SWEAT]: V, [A.ALEXIA_BLUSH]: V, [A.ALEXIA_DIZZY]: V },
             shy:         { [A.ALEXIA_BLUSH]: V },
-            confused:    { [A.ALEXIA_QUESTION]: V },
+            hesitant:    { [A.ALEXIA_SWEAT]: V },
+            // ── Sad / heavy ────────────────────────────────────────────────────
             crying:      { [A.ALEXIA_CRY]: V, [A.ALEXIA_BLUSH]: V },
             sad:         { [A.ALEXIA_CRY]: V },
             melancholic: { [A.ALEXIA_SWEAT]: V },
-            playful:     { [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            lonely:      { [A.ALEXIA_CRY]: V },
+            // ── Confused / disoriented ─────────────────────────────────────────
+            confused:    { [A.ALEXIA_QUESTION]: V },
+            surprised:   { [A.ALEXIA_QUESTION]: V, [A.ALEXIA_DIZZY]: V },
+            scared:      { [A.ALEXIA_SWEAT]: V, [A.ALEXIA_DIZZY]: V },
+            // ── Anger / negative ───────────────────────────────────────────────
             anger:       { [A.ALEXIA_ANGRY]: V },
             angry:       { [A.ALEXIA_ANGRY]: V },
             dark:        { [A.ALEXIA_ANGRY]: V },
             menacing:    { [A.ALEXIA_ANGRY]: V },
-            surprised:   { [A.ALEXIA_QUESTION]: V, [A.ALEXIA_DIZZY]: V },
-            smug:        { [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
-            hesitant:    { [A.ALEXIA_SWEAT]: V },
-            grateful:    { [A.ALEXIA_BLUSH]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
-            tender:      { [A.ALEXIA_BLUSH]: V },
-            kind:        { [A.ALEXIA_BLUSH]: V },
-            lonely:      { [A.ALEXIA_CRY]: V },
-            longing:     { [A.ALEXIA_BLUSH]: V },
             disgusted:   { [A.ALEXIA_CHEEK_PUFF]: V },
-            scared:      { [A.ALEXIA_SWEAT]: V, [A.ALEXIA_DIZZY]: V }
         };
         return map[label] || {};
     }
