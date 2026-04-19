@@ -22,6 +22,7 @@ export class CapabilityRegistry {
             hasBrowAngle: false,
             hasEyeSmile: false,
             // Expressions
+            modelFamily: 'generic',
             expressions: [],
             // Motions: { groupName: count } — empty when model has no motion files
             motionGroups: {}
@@ -67,11 +68,18 @@ export class CapabilityRegistry {
 
                 console.log('[CapabilityRegistry] Total Discovered:', this.availableParams.size, 'parameters');
                 // Check VT_ELF overlay params specifically — if missing they'll fail silently
-                const overlayCheck = ['Param15','Angervis','ParamHateVis','ParamSweatVis','Paramskirtexpend','Param11','Paramtoungevis','ParamBero'];
-                const found = overlayCheck.filter(p => this.availableParams.has(p));
-                const missing = overlayCheck.filter(p => !this.availableParams.has(p));
-                console.log('[CapabilityRegistry] VT_ELF overlays FOUND:', found.join(', ') || 'none');
-                if (missing.length) console.warn('[CapabilityRegistry] VT_ELF overlays MISSING (will silently fail):', missing.join(', '));
+                const elfOverlays = ['Param15','Angervis','ParamHateVis','ParamSweatVis','Paramskirtexpend','Param11','Paramtoungevis','ParamBero'];
+                const elfFound = elfOverlays.filter(p => this.availableParams.has(p)).length;
+                const alexiaOverlays = ['Param44','Param43','Param46','Param54','Param55','Param56','Param57','Param58','Param59','Param51','Param52','Param21'];
+                const alexiaFound = alexiaOverlays.filter(p => this.availableParams.has(p)).length;
+                // Alexia shares Param11/Param15 with VT_ELF but with different meanings —
+                // use the high-signal Alexia-only params (star eyes/blush/sweat) to decide.
+                const isAlexia = this.availableParams.has('Param55')
+                              && this.availableParams.has('Param58')
+                              && this.availableParams.has('Param44');
+                this.capabilities.modelFamily = isAlexia ? 'alexia' : (elfFound >= 4 ? 'vt_elf' : 'generic');
+                console.log('[CapabilityRegistry] Model family:', this.capabilities.modelFamily,
+                    `(elf=${elfFound}/${elfOverlays.length}, alexia=${alexiaFound}/${alexiaOverlays.length})`);
                 this._detectFeatures();
             } catch (e) {
                 console.warn('[CapabilityRegistry] Parameter discovery failed:', e.message);
@@ -90,7 +98,9 @@ export class CapabilityRegistry {
         if (model.internalModel && model.internalModel.settings && model.internalModel.settings.expressions) {
             try {
                 // Usually an array of { name: string, file: string }
-                this.capabilities.expressions = model.internalModel.settings.expressions.map(exp => exp.name || exp.file.replace('.exp3.json', ''));
+                this.capabilities.expressions = model.internalModel.settings.expressions
+                    .map(exp => exp.name || (exp.file ? exp.file.replace('.exp3.json', '') : null))
+                    .filter(Boolean);
                 console.log('[CapabilityRegistry] Discovered expressions (from settings):', this.capabilities.expressions.join(', '));
             } catch (e) {
                 console.warn('[CapabilityRegistry] Expression discovery failed:', e.message);
@@ -158,7 +168,9 @@ export class CapabilityRegistry {
                         }
                     }
 
-                    this.capabilities.expressions = model.internalModel.settings.expressions.map(exp => exp.name || exp.file.replace('.exp3.json', ''));
+                    this.capabilities.expressions = model.internalModel.settings.expressions
+                        .map(exp => exp.name || (exp.file ? exp.file.replace('.exp3.json', '') : null))
+                        .filter(Boolean);
                     console.log(`[CapabilityRegistry] Injected ${addedCount} loose folder expressions!`);
                 }
             } catch (e) {
@@ -234,6 +246,7 @@ export class CapabilityRegistry {
             hasCheek: false,
             hasBrowAngle: false,
             hasEyeSmile: false,
+            modelFamily: 'generic',
             expressions: [],
             motionGroups: {}
         };

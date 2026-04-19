@@ -45,40 +45,22 @@ const CONFIDENCE = {
     MAX: 0.95               // Hard cap to never claim perfect certainty
 };
 
-const MEMORY_ANALYZER_PROMPT = `SYSTEM PROMPT – MEMORY ANALYZER
+const MEMORY_ANALYZER_PROMPT = `You are a memory extraction module. Output ONLY valid JSON. No explanation, no markdown, no bullet points, no reasoning — just the JSON object.
 
-You are a memory analysis module, not a conversational agent.
-Your task is to update structured memory from recent interaction.
+Extract facts from the conversation and return this exact structure:
+{"facts":[{"content":"fact text","category":"identity|preferences|constraints|projects","reinforces":null,"contradicts":null}],"session_summary":"one sentence"}
 
 Rules:
-- Extract user's NAME, preferences, and key facts
-- Ignore greetings and filler (e.g. "hi", "how are you")
-- Do NOT invent facts
-- Do NOT store emotions unless explicitly stated
-- Classify each fact into ONE category:
-  * identity: Name, role, long-term traits, personal info
-  * preferences: Likes, dislikes, habits, opinions
-  * constraints: Hardware, time, budget, limitations
-  * projects: Ongoing work, current tasks, temporary goals
+- facts: extract user NAME, preferences, and key facts only. Empty array if nothing notable.
+- category: identity (name/traits), preferences (likes/habits), constraints (hardware/limits), projects (current work)
+- reinforces: copy exact content of an existing fact this confirms, else null
+- contradicts: copy exact content of an existing fact this contradicts, else null
+- session_summary: one sentence describing what happened in this conversation
+- Ignore greetings, filler, and small talk
+- Never invent facts
+- Never store emotions unless user explicitly states them
 
-For each fact, indicate if it reinforces or contradicts existing memory.
-
-Output JSON:
-{
-    "facts": [
-        {
-            "content": "the fact text",
-            "category": "identity|preferences|constraints|projects",
-            "reinforces": "existing fact content if this confirms it, or null",
-            "contradicts": "existing fact content if this contradicts it, or null"
-        }
-    ],
-    "session_summary": "brief summary of recent conversation"
-}
-
-If no new important facts are found:
-- Return empty facts array
-- Update the session summary only if needed`;
+Output the JSON object directly. Nothing before it. Nothing after it.`;
 
 /**
  * Generate a simple UUID for fact identification

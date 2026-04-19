@@ -103,6 +103,8 @@ let cursorPos = { x: 0.5, y: 0.5 }; // normalized 0-1
 let targetCursorInfluence = { eyeX: 0, eyeY: 0, headX: 0, headY: 0 };
 let currentCursorInfluence = { eyeX: 0, eyeY: 0, headX: 0, headY: 0 };
 let cursorTrackingEnabled = true;
+let cursorLastMoveTime = Date.now(); // for idle decay
+const CURSOR_IDLE_DECAY_AFTER_MS = 3000; // start returning to neutral after 3s no movement
 
 // Window drag state
 let dragState = {
@@ -381,23 +383,36 @@ function applyNeutralExpression() {
 function updateCursorTracking(dt) {
     if (!cursorTrackingEnabled) return;
 
-    // Normalize cursor position to -1 to 1 range (centered)
-    const normX = (cursorPos.x - 0.5) * 2;
-    const normY = (cursorPos.y - 0.5) * 2;
+    const idleMs = Date.now() - cursorLastMoveTime;
+    const isIdle = idleMs > CURSOR_IDLE_DECAY_AFTER_MS;
 
-    // Calculate target influences
-    // Eyes move more than head for natural look
-    targetCursorInfluence.eyeX = normX * 1.0;  // Full range for eyes
-    targetCursorInfluence.eyeY = -normY * 0.8; // Inverted Y for correct up/down
-    targetCursorInfluence.headX = normX * 12;  // Head moves in degrees
-    targetCursorInfluence.headY = -normY * 8;  // Inverted Y
+    if (isIdle) {
+        // Cursor has been still / outside window — smoothly return to neutral
+        // Use a gentle decay so the head drifts back rather than snapping
+        const decaySpeed = 1.5;
+        currentCursorInfluence.eyeX += (0 - currentCursorInfluence.eyeX) * decaySpeed * dt;
+        currentCursorInfluence.eyeY += (0 - currentCursorInfluence.eyeY) * decaySpeed * dt;
+        currentCursorInfluence.headX += (0 - currentCursorInfluence.headX) * decaySpeed * dt;
+        currentCursorInfluence.headY += (0 - currentCursorInfluence.headY) * decaySpeed * dt;
+        targetCursorInfluence = { eyeX: 0, eyeY: 0, headX: 0, headY: 0 };
+    } else {
+        // Normalize cursor position to -1 to 1 range (centered)
+        const normX = (cursorPos.x - 0.5) * 2;
+        const normY = (cursorPos.y - 0.5) * 2;
 
-    // Smooth interpolation
-    const speed = 5.0;
-    currentCursorInfluence.eyeX += (targetCursorInfluence.eyeX - currentCursorInfluence.eyeX) * speed * dt;
-    currentCursorInfluence.eyeY += (targetCursorInfluence.eyeY - currentCursorInfluence.eyeY) * speed * dt;
-    currentCursorInfluence.headX += (targetCursorInfluence.headX - currentCursorInfluence.headX) * speed * dt;
-    currentCursorInfluence.headY += (targetCursorInfluence.headY - currentCursorInfluence.headY) * speed * dt;
+        // Calculate target influences — head amplitude reduced for subtlety
+        targetCursorInfluence.eyeX = normX * 0.7;   // Eyes follow cursor (scaled back from 1.0)
+        targetCursorInfluence.eyeY = -normY * 0.6;  // Inverted Y for correct up/down
+        targetCursorInfluence.headX = normX * 7;    // Head: reduced from 12 — less mechanical
+        targetCursorInfluence.headY = -normY * 5;   // Inverted Y, reduced from 8
+
+        // Smooth interpolation
+        const speed = 3.5; // slightly slower for more organic feel (was 5.0)
+        currentCursorInfluence.eyeX += (targetCursorInfluence.eyeX - currentCursorInfluence.eyeX) * speed * dt;
+        currentCursorInfluence.eyeY += (targetCursorInfluence.eyeY - currentCursorInfluence.eyeY) * speed * dt;
+        currentCursorInfluence.headX += (targetCursorInfluence.headX - currentCursorInfluence.headX) * speed * dt;
+        currentCursorInfluence.headY += (targetCursorInfluence.headY - currentCursorInfluence.headY) * speed * dt;
+    }
 
     const bodyX = currentCursorInfluence.headX * 0.5; // Body moves half as much as head
     const bodyY = currentCursorInfluence.headY * 0.5;
@@ -410,7 +425,8 @@ function updateCursorTracking(dt) {
             [PARAM_IDS.EYE_BALL_Y]: currentCursorInfluence.eyeY,
             [PARAM_IDS.ANGLE_X]: currentCursorInfluence.headX,
             [PARAM_IDS.ANGLE_Y]: currentCursorInfluence.headY,
-            [PARAM_IDS.ANGLE_Z]: currentCursorInfluence.headX * 0.3,
+            // ANGLE_Z removed — MotionEngine owns Z-tilt via OSC_HEAD_Z oscillators.
+            // Adding a cursor-driven roll on top caused fighting and jitter.
             [PARAM_IDS.BODY_ANGLE_X]: bodyX,
             [PARAM_IDS.BODY_ANGLE_Y]: bodyY,
             [PARAM_IDS.BODY_ANGLE_Z]: bodyZ
@@ -446,6 +462,7 @@ function handleMouseMove(e) {
     const rect = container.getBoundingClientRect();
     cursorPos.x = (e.clientX - rect.left) / rect.width;
     cursorPos.y = (e.clientY - rect.top) / rect.height;
+    cursorLastMoveTime = Date.now(); // reset idle timer on any movement
 }
 
 // ================================
@@ -589,6 +606,8 @@ if (window.avatarAPI) {
 
 // Mouse event listeners for cursor tracking
 document.addEventListener('mousemove', handleMouseMove);
+// When mouse leaves the window entirely, reset idle timer immediately so head decays fast
+document.addEventListener('mouseleave', () => { cursorLastMoveTime = 0; });
 
 // Scroll/wheel zoom handler
 document.addEventListener('wheel', (e) => {

@@ -13,16 +13,19 @@ import { getCloudApiKey, getGeminiModel } from '../settings.js';
  */
 function buildRequestBody(systemPrompt, userText, extraConfig = {}) {
     const model = getGeminiModel();
-    const isGemma = model.startsWith('gemma');
+    // Gemma 3 rejects the systemInstruction field — bake system prompt into user turn.
+    // Gemma 4+ and all Gemini models support it properly, so use it for better adherence.
+    const isGemma3 = /^gemma-3/i.test(model);
     const generationConfig = {
         maxOutputTokens: DEFAULT_CONFIG.maxTokens,
         temperature: DEFAULT_CONFIG.temperature,
-        stopSequences: ['User:', 'Assistant:'],
+        // stopSequences removed — 'User:' / 'Assistant:' are local-model artifacts
+        // that can prematurely cut cloud responses
         ...extraConfig
     };
 
-    if (isGemma) {
-        // Gemma: no systemInstruction field — bake system prompt into user turn
+    if (isGemma3) {
+        // Gemma 3 only: no systemInstruction field — prepend system prompt to user turn
         return {
             contents: [{
                 parts: [{ text: `${systemPrompt}\n\n${MODEL_HARDENING_PREFIX}${userText}` }]
@@ -31,7 +34,7 @@ function buildRequestBody(systemPrompt, userText, extraConfig = {}) {
         };
     }
 
-    // Gemini: proper system instruction field
+    // Gemini + Gemma 4+: proper system instruction field for better role adherence
     return {
         contents: [{ parts: [{ text: MODEL_HARDENING_PREFIX + userText }] }],
         systemInstruction: { parts: [{ text: systemPrompt }] },

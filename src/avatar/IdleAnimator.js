@@ -136,18 +136,9 @@ export class IdleAnimator {
             state.parameters[PARAM_IDS.ELF_EAR_WAVE] = earWave;
         }
 
-        // 3. Head/Body Sway
-        if (!this.pauseSway) {
-            this.state.swayPhase += (dt / TIMING.IDLE_SWAY_CYCLE) * Math.PI * 2;
-            if (this.state.swayPhase > Math.PI * 2) this.state.swayPhase -= Math.PI * 2;
-
-            const swayValue = Math.sin(this.state.swayPhase) * TIMING.IDLE_SWAY_AMPLITUDE * this.intensityMultiplier;
-
-            if (caps.hasAngleZ) state.parameters[PARAM_IDS.ANGLE_Z] = swayValue;
-
-            // Subtly sway body if supported instead of just neck
-            if (caps.hasBodyAngleX) state.parameters[PARAM_IDS.BODY_ANGLE_X] = swayValue * 0.5;
-        }
+        // Head/body sway is owned by MotionEngine (OSC_HEAD_Z / OSC_BODY_X oscillator banks)
+        // which write ANGLE_Z and BODY_ANGLE_X additively every frame.
+        // Writing them here too caused double-sway jitter — removed.
 
         // 3. Blinking — with L/R asymmetry for organic feel
         // Eye values go into _lastBlinkParams (not state.parameters) so the

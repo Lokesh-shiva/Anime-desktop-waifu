@@ -190,11 +190,11 @@ export const BrainRouter = {
     _parseLLMResponse(rawText) {
         let parsed = null;
 
-        // Strip the leading [EMOTION:label:intensity] tag line produced by cloud models.
-        // The streaming path strips it during chunk processing; the non-streaming
-        // generate() path passes raw text here, so we must strip it before parsing.
-        const strippedText = rawText.replace(/^\[EMOTION:[^\]\n]+\]\n?/, '').trim();
-        rawText = strippedText;
+        // Strip [EMOTION:label:intensity] tag — may appear at start or end depending on model
+        rawText = rawText.replace(/\[EMOTION:[^\]\n]+\]\n?/g, '').trim();
+
+        // Strip markdown code fences — Gemma 3 / less-compliant models wrap JSON in ```json ... ```
+        rawText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
 
         // Strategy 1: Pure JSON parse (cloud models usually return clean JSON)
         try {

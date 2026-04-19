@@ -180,7 +180,31 @@ export class AvatarController {
                     ...Object.keys(controller.transitionStartValues)
                 ]);
 
+                // Alexia overlay params that affect the mouth rig — skip during TTS
+                // so they don't fight ParamMouthOpenY lip sync animation
+                const isSpeaking = controller.mouthSync?.isActive?.();
+                const MOUTH_OVERLAYS = new Set(['Param54', 'Param46']); // GRIN, TONGUE
+
+                // On Alexia: actively zero every overlay NOT in the current emotion
+                // every frame. Once a param is cleaned out of currentEmotionValues,
+                // the Cubism expression/motion pipeline can quietly restore it to a
+                // non-zero value and nothing would counter it. This suppresses that.
+                const ALEXIA_OVERLAYS_ALL = ['Param21','Param43','Param44','Param46',
+                    'Param51','Param52','Param54','Param55','Param56','Param57','Param58','Param59'];
+                if (controller.registry?.getCapabilities?.().modelFamily === 'alexia') {
+                    for (const paramId of ALEXIA_OVERLAYS_ALL) {
+                        if (!(paramId in controller.emotionParams)) {
+                            // Skip mouth overlays during TTS even in this zero-pass
+                            if (isSpeaking && MOUTH_OVERLAYS.has(paramId)) continue;
+                            try { coreModel.setParameterValueById(paramId, 0); } catch (e) {}
+                        }
+                    }
+                }
+
                 for (const paramId of allParamIds) {
+                    // Skip mouth-affecting Alexia overlays during TTS playback
+                    if (isSpeaking && MOUTH_OVERLAYS.has(paramId)) continue;
+
                     const startVal   = controller.transitionStartValues[paramId] ?? 0;
                     // Use param's natural resting value as the neutral target so
                     // eye params (default 1.0) smoothly reopen on emotion decay
@@ -573,8 +597,21 @@ export class AvatarController {
             coreModel = this.renderer.model?.internalModel?.coreModel;
         } catch (e) { /* no core model available */ }
 
+        // Alexia overlay params are discrete binary effects (Add-blend, value 30).
+        // They must clear instantly on emotion change — smooth lerp causes them to
+        // bleed visually into the next emotion (e.g. grin lingering into embarrassed).
+        const ALEXIA_OVERLAYS = new Set([
+            'Param21','Param43','Param44','Param46',
+            'Param51','Param52','Param54','Param55','Param56','Param57','Param58','Param59'
+        ]);
+
         this.transitionStartValues = {};
         for (const paramId of allParamIds) {
+            // Alexia overlays not in the new preset: snap start to 0 → clears instantly
+            if (ALEXIA_OVERLAYS.has(paramId) && !(paramId in newParams)) {
+                this.transitionStartValues[paramId] = 0;
+                continue;
+            }
             if (paramId in this.currentEmotionValues) {
                 // We've been managing this param — use our tracked value
                 this.transitionStartValues[paramId] = this.currentEmotionValues[paramId];

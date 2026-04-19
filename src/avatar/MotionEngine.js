@@ -89,30 +89,30 @@ const EMOTION_SIGNALS = {
 // Periods are mutually irrational (no two are integer multiples) so combined
 // motion never visually loops in a session. Amplitudes in Live2D param units
 // (same scale as ParamAngleX range -30…+30).
-// Boosted so organic wobble is clearly visible above cursor-driven head movement.
+// Kept moderate — excited bursts add on top, total budget ~±6° per axis.
 const OSC_HEAD_X = [
-    { freq: 0.137, amp: 2.80 },  // ~7.3 s  — slow wide drift
-    { freq: 0.085, amp: 1.60 },  // ~11.8 s — medium
-    { freq: 0.223, amp: 0.60 },  // ~4.5 s  — fast subtle
+    { freq: 0.137, amp: 1.60 },  // ~7.3 s  — slow wide drift
+    { freq: 0.085, amp: 0.90 },  // ~11.8 s — medium
+    { freq: 0.223, amp: 0.30 },  // ~4.5 s  — subtle texture
 ];
 const OSC_HEAD_Y = [
-    { freq: 0.114, amp: 1.50 },  // ~8.8 s
-    { freq: 0.075, amp: 0.90 },  // ~13.3 s
-    { freq: 0.177, amp: 0.35 },  // ~5.6 s
+    { freq: 0.114, amp: 0.90 },  // ~8.8 s
+    { freq: 0.075, amp: 0.55 },  // ~13.3 s
+    { freq: 0.177, amp: 0.20 },  // ~5.6 s
 ];
 // Z drives tilt/sway — replaces IdleAnimator's simple sine sway
 const OSC_HEAD_Z = [
-    { freq: 0.103, amp: 2.20 },  // ~9.7 s  — primary sway (≈ old 3° idle amplitude)
-    { freq: 0.163, amp: 1.00 },  // ~6.1 s  — secondary
-    { freq: 0.251, amp: 0.38 },  // ~4.0 s  — high-freq ripple
+    { freq: 0.103, amp: 1.40 },  // ~9.7 s  — primary sway
+    { freq: 0.163, amp: 0.55 },  // ~6.1 s  — secondary
+    // removed 0.251 Hz ripple — too fast, caused visible jitter
 ];
 const OSC_BODY_X = [
-    { freq: 0.112, amp: 2.00 },  // ~8.9 s
-    { freq: 0.071, amp: 1.00 },  // ~14.1 s
+    { freq: 0.112, amp: 1.20 },  // ~8.9 s
+    { freq: 0.071, amp: 0.60 },  // ~14.1 s
 ];
 const OSC_BODY_Z = [
-    { freq: 0.091, amp: 1.40 },  // ~11.0 s
-    { freq: 0.141, amp: 0.60 },  // ~7.1 s
+    { freq: 0.091, amp: 0.80 },  // ~11.0 s
+    { freq: 0.141, amp: 0.35 },  // ~7.1 s
 ];
 
 /** Sum a bank of oscillators at elapsed time t (seconds). */
@@ -253,57 +253,42 @@ export class MotionEngine {
         let headY = evalOsc(OSC_HEAD_Y, t + this._ph.hy) * amp;
         let headZ = evalOsc(OSC_HEAD_Z, t + this._ph.hz) * amp;
 
-        // Signal-driven posture modulation — scaled to be clearly visible
-        headY += c * 3.5 - shy * 5.5;             // confidence lifts, shyness dips
-        headZ += -shy * 8.0;                       // shyness tilts head clearly forward
+        // Signal-driven posture modulation
+        headY += c * 2.2 - shy * 3.5;             // confidence lifts, shyness dips
+        headZ += -shy * 5.0;                       // shyness tilts head forward
 
-        // ── Arousal energy — base restlessness + excited burst ────────────────
-        // IMPORTANT: these inline sin/cos use ω directly (rad/s), NOT Hz.
-        //   period = 2π / ω   e.g.  ω=3.14 → period≈2.0 s
-        //                            ω=7.85 → period≈0.8 s
-        //                            ω=15.7 → period≈0.4 s
-        // evalOsc() uses freq*2π internally so its values ARE in Hz — don't mix them.
-
+        // ── Arousal energy — gentle restlessness + mild excited swell ─────────
         // General alive-ness at any elevated arousal (period ≈ 4 s)
-        headX += a * 2.5 * Math.sin(t * 1.57);
+        headX += a * 1.2 * Math.sin(t * 1.57);
 
-        // Quadratic excited burst — only very high arousal triggers this strongly.
-        // Three frequencies to create chaotic unpredictable energy, not a simple wobble.
+        // Quadratic excited swell — only kicks in at high arousal, kept subtle.
+        // Two slow frequencies only — fast quiver (15.7 rad/s) removed: too jittery.
         const aExcite = a * a;  // e.g. 0.81 for full excited
 
-        // Big sweep X  (period ≈ 2.0 s) — wide restless side-to-side sweep
-        headX += aExcite * 10.0 * Math.sin(t * 3.14 + this._ph.hx * 0.1);
-        // Rapid flick X (period ≈ 0.8 s) — fast visible head jerk
-        headX += aExcite * 6.0  * Math.sin(t * 7.85 + 1.2);
-        // Fast quiver X (period ≈ 0.4 s) — high-freq excited trembling
-        headX += aExcite * 3.0  * Math.sin(t * 15.7 + this._ph.hx * 0.3);
+        // Gentle sweep X  (period ≈ 2.0 s)
+        headX += aExcite * 3.5 * Math.sin(t * 3.14 + this._ph.hx * 0.1);
+        // Mild rock X (period ≈ 0.8 s) — energy without jitter
+        headX += aExcite * 1.5 * Math.sin(t * 7.85 + 1.2);
 
-        // Excited nodding Y (period ≈ 1.5 s + 0.6 s)
-        headY += aExcite * 5.5  * Math.sin(t * 4.19 + 0.5);
-        headY += aExcite * 2.5  * Math.sin(t * 10.5 + 1.8);
+        // Excited nodding Y (period ≈ 1.5 s only — removed fast 0.6 s component)
+        headY += aExcite * 2.5 * Math.sin(t * 4.19 + 0.5);
 
-        // Energetic Z tilt (period ≈ 3.0 s + 1.0 s)
-        headZ += aExcite * 6.0  * Math.cos(t * 2.09 + 0.4);
-        headZ += aExcite * 4.0  * Math.cos(t * 6.28 + this._ph.hz * 0.2);
+        // Energetic Z tilt (period ≈ 3.0 s only — removed fast 1.0 s component)
+        headZ += aExcite * 2.5 * Math.cos(t * 2.09 + 0.4);
 
-        // ── Nervous flutter — flustered / embarrassed / scared ─────────────────
-        // shy × a product is large only when BOTH flustered AND wound up.
-        // Use genuinely fast ω values (≥ 6 rad/s) so the tremor feels rapid,
-        // clearly different from the slow idle base oscillators.
+        // ── Nervous flutter — shy + wound up ──────────────────────────────────
+        // Two slow components only — fast ω (14+, 17+ rad/s) produced visible tremor.
         const flutter = shy * Math.max(0, a - 0.25);
 
-        headX += flutter * 6.0  * Math.sin(t * 10.5 + this._ph.hx * 0.2); // ~0.60 s
-        headZ += flutter * 4.0  * Math.cos(t * 14.0 + 0.7);                // ~0.45 s
-        headY += flutter * 3.0  * Math.sin(t * 6.28 + 1.5);                // ~1.00 s
-        headX += flutter * 3.5  * Math.sin(t * 17.3 + 0.9);                // ~0.36 s
-        headZ += flutter * 2.5  * Math.cos(t * 12.6 + this._ph.hz * 0.3); // ~0.50 s
+        headX += flutter * 2.0 * Math.sin(t * 6.28 + this._ph.hx * 0.2); // ~1.0 s
+        headY += flutter * 1.2 * Math.sin(t * 4.71 + 1.5);                // ~1.3 s
 
         // ── Body sway (independent of head) ───────────────────────────────────
-        let bodyX = evalOsc(OSC_BODY_X, t + this._ph.bx) * amp * 0.75;
-        let bodyZ = evalOsc(OSC_BODY_Z, t + this._ph.bz) * amp * 0.55;
-        // Excited body rocking — torso energized (period ≈ 1.5 s + 1.2 s)
-        bodyX += aExcite * 5.0  * Math.sin(t * 4.19 + 0.3);
-        bodyZ += aExcite * 3.0  * Math.cos(t * 5.24 + 1.1);
+        let bodyX = evalOsc(OSC_BODY_X, t + this._ph.bx) * amp * 0.60;
+        let bodyZ = evalOsc(OSC_BODY_Z, t + this._ph.bz) * amp * 0.45;
+        // Mild excited body swell (period ≈ 1.5 s)
+        bodyX += aExcite * 2.0 * Math.sin(t * 4.19 + 0.3);
+        bodyZ += aExcite * 1.2 * Math.cos(t * 5.24 + 1.1);
 
         // ── Anticipation transient ─────────────────────────────────────────────
         if (this._antTime > 0) {

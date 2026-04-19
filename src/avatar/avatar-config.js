@@ -84,7 +84,22 @@ export const PARAM_IDS = Object.freeze({
     BERO:          'ParamBero',        // Tongue wave
     ANGER_VIS:     'Angervis',         // Anger effect overlay
     HAPPY_VIS:     'Param15',          // Happiness sparkle effect
-    HATE_VIS:      'ParamHateVis'      // Disgust/hate effect overlay
+    HATE_VIS:      'ParamHateVis',     // Disgust/hate effect overlay
+
+    // Alexia model-specific overlay parameters (from Alexia.cdi3.json)
+    // Values in Alexia .exp3 files are 30 Add-blend — treat as binary overlays
+    ALEXIA_SWEAT:       'Param44',     // 汗 — sweat drop (nervous/flustered)
+    ALEXIA_QUESTION:    'Param43',     // 问号 — question mark (confused)
+    ALEXIA_TONGUE:      'Param46',     // 舌头 — tongue out (playful)
+    ALEXIA_GRIN:        'Param54',     // 咧嘴笑 — wide grin
+    ALEXIA_STAR_EYES:   'Param55',     // 星星眼 — star eyes (love/excited)
+    ALEXIA_DIZZY:       'Param56',     // 晕 — dizzy swirls (overwhelmed)
+    ALEXIA_ANGRY:       'Param57',     // 生气 — anger vein
+    ALEXIA_BLUSH:       'Param58',     // 脸红 — blush (shy/love/embarrassed)
+    ALEXIA_CRY:         'Param59',     // 哭 — tears (crying/sad)
+    ALEXIA_EYE_SQUINT_L:'Param51',     // 挤眼睛 L — smug/happy squint
+    ALEXIA_EYE_SQUINT_R:'Param52',     // 挤眼睛 R — smug/happy squint
+    ALEXIA_CHEEK_PUFF:  'Param21'      // 鼓脸 — pouty/flustered
 });
 
 // State behavior presets

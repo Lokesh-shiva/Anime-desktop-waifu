@@ -494,8 +494,37 @@ export class EmotionMapper {
             }
         };
 
-        const preset = presets[label] || presets['neutral'];
+        let preset = presets[label] || presets['neutral'];
         if (!preset) return null;
+
+        // ── Alexia overlay injection ────────────────────────────────────────
+        // Alexia shares Param11/Param15 with VT_ELF but those IDs mean
+        // different things (sunglasses / unknown) on Alexia — so when we
+        // detect Alexia, strip VT_ELF overlay keys and inject Alexia's own
+        // rich overlay set (star eyes, blush, sweat, question, dizzy, etc.)
+        const family = this.registry?.getCapabilities?.().modelFamily;
+        if (family === 'alexia') {
+            const stripped = {};
+            const ELF_ONLY = new Set([
+                PARAM_IDS.ELF_EAR, PARAM_IDS.ELF_EAR_WAVE,
+                PARAM_IDS.HAPPY_VIS, PARAM_IDS.ANGER_VIS, PARAM_IDS.HATE_VIS,
+                PARAM_IDS.SWEAT_VIS, PARAM_IDS.TONGUE_VIS, PARAM_IDS.BERO,
+                PARAM_IDS.SKIRT_EXPAND
+            ]);
+            for (const [k, v] of Object.entries(preset)) {
+                if (!ELF_ONLY.has(k)) stripped[k] = v;
+            }
+            // Cap EYE_L/R_SMILE to 0.35 on Alexia — higher values produce an
+            // unnatural creepy grin on her art style. Alexia's Param51/52 overlay
+            // (EYE_SQUINT) handles the "happy eyes" effect instead.
+            const SMILE_CAP = 0.35;
+            if (stripped[PARAM_IDS.EYE_L_SMILE] > SMILE_CAP) stripped[PARAM_IDS.EYE_L_SMILE] = SMILE_CAP;
+            if (stripped[PARAM_IDS.EYE_R_SMILE] > SMILE_CAP) stripped[PARAM_IDS.EYE_R_SMILE] = SMILE_CAP;
+            // Also cap MOUTH_FORM — her mouth rig is more expressive; full 1.0 looks jarring
+            if (stripped[PARAM_IDS.MOUTH_FORM] > 0.6) stripped[PARAM_IDS.MOUTH_FORM] = 0.6;
+            const alexiaLayer = this._alexiaOverlayFor(label);
+            preset = { ...stripped, ...alexiaLayer };
+        }
 
         // Overlay/visibility params are binary switches — they must reach their
         // full value to trigger the visual effect. Do NOT scale them by intensity.
@@ -505,6 +534,12 @@ export class EmotionMapper {
             PARAM_IDS.HATE_VIS,     // ParamHateVis    — disgust effect
             PARAM_IDS.SWEAT_VIS,    // ParamSweatVis   — sweat/nervousness drops
             PARAM_IDS.TONGUE_VIS,   // Paramtoungevis  — tongue visibility (binary switch)
+            // Alexia overlays — all Add-blend binary switches at value 30
+            PARAM_IDS.ALEXIA_SWEAT, PARAM_IDS.ALEXIA_QUESTION, PARAM_IDS.ALEXIA_TONGUE,
+            PARAM_IDS.ALEXIA_GRIN, PARAM_IDS.ALEXIA_STAR_EYES, PARAM_IDS.ALEXIA_DIZZY,
+            PARAM_IDS.ALEXIA_ANGRY, PARAM_IDS.ALEXIA_BLUSH, PARAM_IDS.ALEXIA_CRY,
+            PARAM_IDS.ALEXIA_EYE_SQUINT_L, PARAM_IDS.ALEXIA_EYE_SQUINT_R,
+            PARAM_IDS.ALEXIA_CHEEK_PUFF
         ]);
 
         const scaled = {};
@@ -512,6 +547,46 @@ export class EmotionMapper {
             scaled[paramId] = OVERLAY_PARAMS.has(paramId) ? value : value * intensity;
         }
         return scaled;
+    }
+
+    /**
+     * Alexia-specific overlay layer per emotion.
+     * Values are 30 (matches Alexia .exp3 Add-blend magnitude).
+     */
+    _alexiaOverlayFor(label) {
+        const A = PARAM_IDS;
+        const V = 30;
+        // GRIN (Param54) = sharp toothy villain-style grin — only for smug/playful.
+        // TONGUE (Param46) = tongue out — only for playful (genuinely cheeky moment).
+        // Warm emotions (happy, love, excited, grateful) use eye squints only — natural soft look.
+        const map = {
+            happy:       { [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            love:        { [A.ALEXIA_STAR_EYES]: V, [A.ALEXIA_BLUSH]: V },
+            excited:     { [A.ALEXIA_STAR_EYES]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            embarrassed: { [A.ALEXIA_SWEAT]: V, [A.ALEXIA_BLUSH]: V },
+            flustered:   { [A.ALEXIA_SWEAT]: V, [A.ALEXIA_BLUSH]: V, [A.ALEXIA_DIZZY]: V },
+            shy:         { [A.ALEXIA_BLUSH]: V },
+            confused:    { [A.ALEXIA_QUESTION]: V },
+            crying:      { [A.ALEXIA_CRY]: V, [A.ALEXIA_BLUSH]: V },
+            sad:         { [A.ALEXIA_CRY]: V },
+            melancholic: { [A.ALEXIA_SWEAT]: V },
+            playful:     { [A.ALEXIA_TONGUE]: V, [A.ALEXIA_GRIN]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            anger:       { [A.ALEXIA_ANGRY]: V },
+            angry:       { [A.ALEXIA_ANGRY]: V },
+            dark:        { [A.ALEXIA_ANGRY]: V },
+            menacing:    { [A.ALEXIA_ANGRY]: V },
+            surprised:   { [A.ALEXIA_QUESTION]: V, [A.ALEXIA_DIZZY]: V },
+            smug:        { [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V, [A.ALEXIA_GRIN]: V },
+            hesitant:    { [A.ALEXIA_SWEAT]: V },
+            grateful:    { [A.ALEXIA_BLUSH]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            tender:      { [A.ALEXIA_BLUSH]: V },
+            kind:        { [A.ALEXIA_BLUSH]: V },
+            lonely:      { [A.ALEXIA_CRY]: V },
+            longing:     { [A.ALEXIA_BLUSH]: V },
+            disgusted:   { [A.ALEXIA_CHEEK_PUFF]: V },
+            scared:      { [A.ALEXIA_SWEAT]: V, [A.ALEXIA_DIZZY]: V }
+        };
+        return map[label] || {};
     }
 
     /**
