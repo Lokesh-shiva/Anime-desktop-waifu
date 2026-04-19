@@ -239,29 +239,9 @@ export class AvatarController {
                     }
                 }
 
-                // ── Blink — always applied last, after all other pipeline writes ──
-                // IdleAnimator caches blink-frame eye values in _lastBlinkParams.
-                // Applying here guarantees we're never blocked by the emotion skip
-                // check in _onTick and that we run after loadParameters().
-                const blinkParams = controller.idleAnimator && controller.idleAnimator._lastBlinkParams;
-                if (blinkParams) {
-                    for (const [paramId, value] of Object.entries(blinkParams)) {
-                        // If the emotion explicitly sets an EYE_OPEN value (e.g. sleepy=0.04,
-                        // smug asymmetry), blink FROM that baseline instead of 1.0.
-                        // Without this, every blink flashes the eyes fully open before closing,
-                        // destroying the sleepy look and breaking asymmetric smug eyes.
-                        const isEyeOpen = paramId === 'ParamEyeLOpen' || paramId === 'ParamEyeROpen';
-                        if (isEyeOpen && (paramId in controller.emotionParams)) {
-                            // value is 0→1 (blink curve). Remap to baseline→0→baseline.
-                            const baseline = controller.currentEmotionValues[paramId]
-                                          ?? controller.emotionParams[paramId]
-                                          ?? 1.0;
-                            try { coreModel.setParameterValueById(paramId, value * baseline); } catch (e) { /* skip */ }
-                        } else {
-                            try { coreModel.setParameterValueById(paramId, value); } catch (e) { /* skip */ }
-                        }
-                    }
-                }
+                // Blink is now applied in beforeModelUpdate (after emotion params,
+                // before coreModel.update) so it bakes into the deformed mesh.
+                // Removed from here to avoid a double-write on the same frame.
             };
             console.log('[AvatarController] Patched model.internalModel.update for smooth emotion transitions');
 
@@ -281,24 +261,38 @@ export class AvatarController {
                     try { coreModel.setParameterValueById(paramId, val); } catch (e) { /* skip */ }
                 }
 
-                // EMOTION ANGLE OVERRIDE — must happen here (after motion pipeline,
-                // before coreModel.update/mesh deformation). Writing ANGLE params in
-                // the post-originalUpdate monkey-patch is too late — the mesh has
-                // already been deformed using the idle motion's angle values.
-                // By writing here we override the motion's ANGLE values so the emotion
-                // head pose (smug head-back, sleepy droop, playful tilt) actually bakes in.
-                // MotionEngine additive sway is then stacked ON TOP for organic movement.
-                const ANGLE_PARAMS = new Set([
-                    'ParamAngleX','ParamAngleY','ParamAngleZ',
-                    'ParamBodyAngleX','ParamBodyAngleY','ParamBodyAngleZ'
-                ]);
+                // EMOTION PARAM OVERRIDE — write ALL current emotion values here, not
+                // in the post-originalUpdate monkey-patch. The monkey-patch runs after
+                // coreModel.update() (mesh deformation) so its writes only affect the
+                // NEXT frame — meanwhile the motion pipeline resets EYE_OPEN to 1.0
+                // and ANGLE_X to idle_curve every frame before deformation.
+                // beforeModelUpdate fires after motion+expression but before deformation,
+                // so our writes here are what actually bakes into the rendered mesh.
+                const bmIsSpeaking = controller.mouthSync?.isActive?.();
+                const BM_MOUTH_OVERLAYS = new Set(['Param46']);
                 for (const [paramId, val] of Object.entries(controller.currentEmotionValues)) {
-                    if (!ANGLE_PARAMS.has(paramId)) continue;
-                    if (Math.abs(val) < 0.001) continue;
+                    if (bmIsSpeaking && BM_MOUTH_OVERLAYS.has(paramId)) continue;
                     try { coreModel.setParameterValueById(paramId, val); } catch (e) { /* skip */ }
                 }
 
-                // Head/body micro-motion — additive on top of the emotion angle above
+                // BLINK — applied after emotion params so it can override EYE_OPEN.
+                // Remaps blink curve to the emotion's EYE_OPEN baseline so sleepy
+                // eyes blink from ~0 to 0 and back (not flash open to 1.0 first).
+                const bmBlinkParams = controller.idleAnimator?._lastBlinkParams;
+                if (bmBlinkParams) {
+                    for (const [paramId, value] of Object.entries(bmBlinkParams)) {
+                        const isEyeOpen = paramId === 'ParamEyeLOpen' || paramId === 'ParamEyeROpen';
+                        if (isEyeOpen && (paramId in controller.emotionParams)) {
+                            const baseline = controller.currentEmotionValues[paramId]
+                                          ?? controller.emotionParams[paramId] ?? 1.0;
+                            try { coreModel.setParameterValueById(paramId, value * baseline); } catch (e) { /* skip */ }
+                        } else {
+                            try { coreModel.setParameterValueById(paramId, value); } catch (e) { /* skip */ }
+                        }
+                    }
+                }
+
+                // Head/body micro-motion — additive on top of emotion angle + blink
                 for (const [paramId, delta] of Object.entries(controller._meAdditive)) {
                     if (Math.abs(delta) < 0.001) continue;
                     try { coreModel.addParameterValueById(paramId, delta); } catch (e) { /* skip */ }
