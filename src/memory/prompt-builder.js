@@ -57,6 +57,11 @@ export function buildSystemPrompt(memoryContext, presenceHints, recentMessages, 
 
     prompt += `\n\n=== CONTEXT (internal — never quote or reference directly) ===`;
 
+    // ── Bond level ───────────────────────────────────────────────────────────
+    if (memoryContext?.bondPrompt) {
+        prompt += `\n\n[Your relationship with them]\n${memoryContext.bondPrompt}\n`;
+    }
+
     // ── Mood ────────────────────────────────────────────────────────────────
     if (hasMood) {
         prompt += `\n\n[Your current mood]\n${memoryContext.moodDescription}\n`;

@@ -290,6 +290,24 @@
       <!-- ── Memory Tab ── -->
       <div id="tab-memory" class="tab-pane">
 
+        <!-- Bond / Relationship -->
+        <div class="setting-section">
+          <div class="section-label">Bond with Miko</div>
+          <div class="bond-wrap">
+            <div class="bond-header">
+              <span id="mem-bond-label" class="bond-level-label">Stranger</span>
+              <span id="mem-bond-score" class="bond-score">0 pts</span>
+            </div>
+            <div class="bond-track">
+              <div id="mem-bond-fill" class="bond-fill"></div>
+            </div>
+            <div class="bond-footer">
+              <span id="mem-bond-interactions" class="bond-interactions">0 interactions</span>
+              <span id="mem-bond-next" class="bond-next"></span>
+            </div>
+          </div>
+        </div>
+
         <!-- Mood -->
         <div class="setting-section">
           <div class="section-label">Mood</div>
@@ -328,6 +346,15 @@
             <button id="mem-prev-toggle" class="mem-icon-btn">▼</button>
           </div>
           <div id="mem-prev-list" class="mem-prev-list" style="display:none"></div>
+        </div>
+
+        <!-- Diary -->
+        <div class="setting-section" id="mem-diary-section" style="display:none">
+          <div class="section-label-row">
+            <span class="section-label" style="margin:0">Miko's Diary</span>
+            <button id="mem-diary-toggle" class="mem-icon-btn">▼</button>
+          </div>
+          <div id="mem-diary-list" class="mem-diary-list" style="display:none"></div>
         </div>
 
         <!-- Danger zone -->

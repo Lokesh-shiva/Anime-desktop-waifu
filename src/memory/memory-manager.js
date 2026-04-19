@@ -8,6 +8,24 @@ import { BrainRouter } from '../llm/brain-router.js';
 const BUFFER_SIZE = 10;
 const AUTO_ANALYZE_INTERVAL = 2; // Analyze every 2 turns for faster updates
 const MAX_PREVIOUS_SESSIONS = 5; // How many past session summaries to keep
+const MAX_DIARY_ENTRIES = 14;    // Keep ~2 weeks of diary
+
+// Bond level thresholds (cumulative score)
+const BOND_LEVELS = [
+    { key: 'stranger',     min: 0,    label: 'Stranger',      prompt: null },
+    { key: 'acquaintance', min: 40,   label: 'Acquaintance',  prompt: 'You know their name and a little about them. You are warming up to them.' },
+    { key: 'friend',       min: 150,  label: 'Friend',        prompt: 'You are genuine friends. You look forward to talking with them and feel comfortable being yourself.' },
+    { key: 'close',        min: 400,  label: 'Close Friend',  prompt: 'You are very close. You worry about them when they are gone too long. You can tease, be vulnerable, and share things unprompted.' },
+    { key: 'bestfriend',   min: 900,  label: 'Best Friend',   prompt: 'They are your closest person. You speak with easy familiarity, inside references feel natural, and you do not hide how much you care.' },
+    { key: 'cherished',    min: 1800, label: 'Cherished',     prompt: 'This person means the world to you. Your warmth is quiet and deep — you don\'t need to perform it.' },
+];
+
+// Instant name-detection patterns (no LLM needed)
+const NAME_PATTERNS = [
+    /my name(?:'s| is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i,
+    /(?:i'm|i am)\s+([A-Z][a-z]{1,})\b(?!\s+(?:not|going|trying|working|doing|feeling|going|a\b))/i,
+    /(?:call me|you can call me|just call me|people call me)\s+([A-Z][a-z]+)/i,
+];
 
 // Mood config
 const MOOD_RESTING_VALUE  = -0.1;  // Drifts here when idle (slightly lonely)
@@ -95,6 +113,12 @@ class MemoryManager {
         // Persistent mood state
         this.mood = { value: 0.0, label: 'content', lastUpdated: Date.now() };
 
+        // Relationship bond
+        this.bond = { score: 0, level: 'stranger', totalInteractions: 0 };
+
+        // Miko's diary entries [{ date, entry }]
+        this.diary = [];
+
         // Load persistent memory
         this._load();
     }
@@ -127,11 +151,22 @@ class MemoryManager {
                     }
                     this._applyIdleMoodDrift();
 
+                    // Restore bond
+                    if (startData.bond && typeof startData.bond.score === 'number') {
+                        this.bond = startData.bond;
+                    }
+
+                    // Restore diary
+                    if (Array.isArray(startData.diary)) {
+                        this.diary = startData.diary;
+                    }
+
                     // Apply fact confidence decay based on time since last use
                     this._applyDecay();
 
                     console.log('[Memory] Loaded', this.facts.length, 'facts;',
-                        this.previousSessions.length, 'previous sessions; mood:', this.mood.label);
+                        this.previousSessions.length, 'previous sessions; mood:', this.mood.label,
+                        '; bond:', this.bond.level);
                 }
             }
         } catch (e) {
@@ -255,6 +290,73 @@ class MemoryManager {
         }
         this.mood.label       = this._moodLabel(this.mood.value);
         this.mood.lastUpdated = Date.now();
+
+        // Bond growth per interaction
+        const sentimentScore = Array.isArray(emotionArc) && emotionArc.length > 0
+            ? (() => {
+                const dominant = emotionArc.reduce((a, b) => b.intensity > a.intensity ? b : a);
+                const lbl = dominant.label?.toLowerCase() || 'neutral';
+                if (POSITIVE_EMOTIONS.has(lbl)) return 3;
+                if (NEGATIVE_EMOTIONS.has(lbl)) return 0.5;
+                return 1.5;
+            })()
+            : 1.5;
+        this.bond.score += sentimentScore;
+        this.bond.totalInteractions = (this.bond.totalInteractions || 0) + 1;
+        this.bond.level = this._getBondLevel();
+        this._save();
+    }
+
+    _getBondLevel() {
+        for (let i = BOND_LEVELS.length - 1; i >= 0; i--) {
+            if (this.bond.score >= BOND_LEVELS[i].min) return BOND_LEVELS[i].key;
+        }
+        return 'stranger';
+    }
+
+    getBondInfo() {
+        const current = BOND_LEVELS.find(l => l.key === this.bond.level) || BOND_LEVELS[0];
+        const nextIdx = BOND_LEVELS.indexOf(current) + 1;
+        const next    = BOND_LEVELS[nextIdx] || null;
+        const progress = next
+            ? Math.min(1, (this.bond.score - current.min) / (next.min - current.min))
+            : 1;
+        return { ...this.bond, label: current.label, progress, nextLabel: next?.label || null };
+    }
+
+    getBondPrompt() {
+        const level = BOND_LEVELS.find(l => l.key === this.bond.level);
+        return level?.prompt || null;
+    }
+
+    /**
+     * Instant name extraction — no LLM, fires synchronously on every message.
+     */
+    _quickExtractName(text) {
+        for (const pattern of NAME_PATTERNS) {
+            const match = text.match(pattern);
+            if (match) {
+                const name = match[1].trim();
+                if (name.length < 2 || name.length > 30) continue;
+                const content = `User's name is ${name}`;
+                const existing = this._findSimilarFact(content, 0.55);
+                if (existing) {
+                    this._reinforceFact(existing);
+                } else {
+                    this.facts.push({
+                        id: generateId(),
+                        content,
+                        category: 'identity',
+                        confidence: 0.85,
+                        lastReinforced: Date.now(),
+                        reinforceCount: 1,
+                    });
+                    console.log('[Memory] Quick-extracted name:', name);
+                }
+                this._save();
+                return;
+            }
+        }
     }
 
     /**
@@ -286,6 +388,8 @@ class MemoryManager {
                     sessionSummary: this.sessionSummary,
                     previousSessions: this.previousSessions,
                     mood: this.mood,
+                    bond: this.bond,
+                    diary: this.diary,
                     lastSeen: Date.now()
                 };
                 await window.assistant.memory.save(data);
@@ -304,6 +408,11 @@ class MemoryManager {
      * @param {string} assistantResponse
      */
     addInteraction(userMessage, assistantResponse) {
+        // Instant name extraction — no waiting for LLM
+        if (userMessage && userMessage !== '[quiet]' && userMessage !== '[camera glance]' && userMessage !== '[app opened]') {
+            this._quickExtractName(userMessage);
+        }
+
         this.recentMessages.push({ role: 'user', content: userMessage });
         this.recentMessages.push({ role: 'assistant', content: assistantResponse });
 
@@ -345,7 +454,8 @@ class MemoryManager {
             facts: usableFacts,
             sessionSummary: this.sessionSummary,
             previousSessions: this.previousSessions,
-            moodDescription: this.getMoodDescription()
+            moodDescription: this.getMoodDescription(),
+            bondPrompt: this.getBondPrompt(),
         };
     }
 
@@ -479,11 +589,30 @@ Analyze and update memory.`;
                 console.log('[Memory] Summary updated; archive now has', this.previousSessions.length, 'entries');
             }
 
+            // Diary entry — written after session summary is ready
+            if (result.session_summary) {
+                this._writeDiaryEntry(result.session_summary).catch(() => {});
+            }
+
         } catch (error) {
             console.warn('[Memory] Analysis failed:', error.message);
         } finally {
             this.isAnalyzing = false;
             this._save();
+        }
+    }
+
+    async _writeDiaryEntry(sessionSummary) {
+        const DIARY_PROMPT = `You are Miko, a warm AI companion. Write a short private diary entry (2-3 sentences, first person) reflecting on the conversation session summarised below. Be genuine, slightly wistful, and personal — like a real diary. Don't start with "Dear diary". Don't use the word "delve". Output ONLY the diary text, nothing else.\n\nSession: ${sessionSummary}`;
+        try {
+            const entry = await BrainRouter.generate(DIARY_PROMPT, { raw: true });
+            if (!entry || entry.length < 10) return;
+            this.diary.push({ date: new Date().toISOString(), entry: entry.trim() });
+            if (this.diary.length > MAX_DIARY_ENTRIES) this.diary.shift();
+            console.log('[Memory] Diary entry written');
+            this._save();
+        } catch (e) {
+            console.warn('[Memory] Diary write failed:', e.message);
         }
     }
 
@@ -512,6 +641,8 @@ Analyze and update memory.`;
         this.sessionSummary   = "";
         this.previousSessions = [];
         this.mood             = { value: 0.0, label: 'content', lastUpdated: Date.now() };
+        this.bond             = { score: 0, level: 'stranger', totalInteractions: 0 };
+        this.diary            = [];
         this.turnCount        = 0;
         this._save();
         console.log('[Memory] Cleared');

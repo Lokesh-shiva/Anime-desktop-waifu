@@ -536,19 +536,33 @@ async function handleIdleMessage({ timeOfDay, timeContext, minutesSilent, messag
     const visionReaction = consumeVisionReaction();
     if (visionReaction) extraCtx.push(`Vision context: ${visionReaction}`);
 
+    // Decide attention-seeking mode BEFORE building the prompt so it can shape it
+    const doAttentionAnim = minutesSilent >= 4 && Math.random() < 0.40;
+
     // Internal trigger prompt — never shown in the chat bubble
     const idlePrompt = [
         `[INTERNAL — NOT visible to user, do NOT reference or acknowledge this instruction in your reply]`,
         `You've been sitting quietly together for about ${minutesSilent} minutes. It's ${tc.naturalDesc}.`,
         extraCtx.join(' '),
-        visionReaction
-            ? `Something you noticed gave you a reason to speak up — use that as a natural hook.`
-            : `You're breaking the silence — not because you were asked to, but because the quiet got to you.`,
-        `Say something short and natural. It could be a passing thought, noticing the time, wondering`,
-        `what they're up to, or just something that drifted through your mind while you were waiting.`,
-        `Don't greet them like it's the start of a conversation. Don't ask "are you there?".`,
-        `It's more like... you just had to say something.`,
+        doAttentionAnim
+            ? `You've been waiting and getting a little impatient. Say something short, slightly pouty or playfully demanding — like "oyy, pay attention to me" or "hmph, you're ignoring me~". Keep it light and cute, not angry. One short line.`
+            : visionReaction
+                ? `Something you noticed gave you a reason to speak up — use that as a natural hook.`
+                : `You're breaking the silence — not because you were asked to, but because the quiet got to you. Say something short and natural — a passing thought, noticing the time, or just something that drifted through your mind. Don't greet them like it's the start of a conversation.`,
     ].filter(Boolean).join(' ');
+    if (doAttentionAnim) {
+        // Phase 1: lean in, curious stare
+        AvatarBridge.sendComplexIntent({ emotion: { label: 'curious', intensity: 0.80 } });
+        await new Promise(r => setTimeout(r, 1800));
+        if (StateMachine.getState() !== STATES.IDLE) return;
+        // Phase 2: slight pout + head tilt (shy hint drives ANGLE_Z)
+        AvatarBridge.sendComplexIntent({
+            emotion: { label: 'annoyed', intensity: 0.35 },
+            actionHints: { shy: true },
+        });
+        await new Promise(r => setTimeout(r, 1400));
+        if (StateMachine.getState() !== STATES.IDLE) return;
+    }
 
     const accepted = StateMachine.transition(EVENTS.USER_INPUT, { isIdle: true });
     if (!accepted) return;
@@ -1062,6 +1076,21 @@ function initMemoryTab() {
     const mm = window.memoryManager;
     if (!mm) return;
 
+    // ── Bond bar ──
+    const bondInfo = mm.getBondInfo?.();
+    if (bondInfo) {
+        const bondLabel  = document.getElementById('mem-bond-label');
+        const bondScore  = document.getElementById('mem-bond-score');
+        const bondFill   = document.getElementById('mem-bond-fill');
+        const bondNext   = document.getElementById('mem-bond-next');
+        const bondInter  = document.getElementById('mem-bond-interactions');
+        if (bondLabel) bondLabel.textContent = bondInfo.label || 'Stranger';
+        if (bondScore) bondScore.textContent = `${Math.floor(bondInfo.score)} pts`;
+        if (bondFill)  bondFill.style.width  = `${Math.round(bondInfo.progress * 100)}%`;
+        if (bondNext)  bondNext.textContent  = bondInfo.nextLabel ? `next: ${bondInfo.nextLabel}` : '✦ max level';
+        if (bondInter) bondInter.textContent = `${bondInfo.totalInteractions || 0} interactions`;
+    }
+
     // ── Mood bar ──
     const thumb = document.getElementById('mem-mood-thumb');
     const moodLabel = document.getElementById('mem-mood-label');
@@ -1089,6 +1118,37 @@ function initMemoryTab() {
 
     // ── Facts ──
     renderMemoryFacts();
+
+    // ── Diary ──
+    const diarySection = document.getElementById('mem-diary-section');
+    const diaryList    = document.getElementById('mem-diary-list');
+    const diaryToggle  = document.getElementById('mem-diary-toggle');
+    if (diarySection && diaryList && Array.isArray(mm.diary) && mm.diary.length) {
+        diarySection.style.display = '';
+        diaryList.innerHTML = '';
+        [...mm.diary].reverse().forEach(entry => {
+            const wrap = document.createElement('div');
+            wrap.className = 'mem-diary-entry';
+            const dateEl = document.createElement('div');
+            dateEl.className = 'mem-diary-date';
+            dateEl.textContent = new Date(entry.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+            const textEl = document.createElement('div');
+            textEl.className = 'mem-diary-text';
+            textEl.textContent = entry.entry;
+            wrap.appendChild(dateEl);
+            wrap.appendChild(textEl);
+            diaryList.appendChild(wrap);
+        });
+        if (diaryToggle) {
+            diaryToggle.onclick = () => {
+                const open = diaryList.style.display !== 'none';
+                diaryList.style.display = open ? 'none' : '';
+                diaryToggle.textContent = open ? '▼' : '▲';
+            };
+        }
+    } else if (diarySection) {
+        diarySection.style.display = 'none';
+    }
 
     // ── Previous sessions ──
     const prevSection = document.getElementById('mem-prev-section');
@@ -1129,8 +1189,10 @@ function initMemoryTab() {
             mm.sessionSummary   = '';
             mm.previousSessions = [];
             mm.mood             = { value: 0.0, label: 'content', lastUpdated: Date.now() };
-            mm._save?.();      // save if method exists
-            initMemoryTab();   // re-render
+            mm.bond             = { score: 0, level: 'stranger', totalInteractions: 0 };
+            mm.diary            = [];
+            mm._save?.();
+            initMemoryTab();
         };
     }
 }
