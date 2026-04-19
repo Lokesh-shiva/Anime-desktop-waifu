@@ -509,32 +509,45 @@ export class EmotionMapper {
             // EYE_OPEN on sleepy, or symmetric eyes undermining smug's knowing look).
             // These replace the ELF stripped base entirely for those labels.
             const P = PARAM_IDS;
+            // NOTE: Alexia only has ParamBrowLY (controls BOTH brows together) and
+            // ParamBrowLForm. ParamBrowRY, brow angles, and ParamCheek do NOT exist
+            // and silently fail. Presets here only use confirmed-working params.
             const ALEXIA_SPECIFIC_BASES = {
                 sleepy: {
-                    // Pure heavy-lidded tired look — no EYE_SMILE fighting the droop
-                    [P.EYE_L_OPEN]:   0.12,   // barely open
-                    [P.EYE_R_OPEN]:   0.08,   // right even more closed (asymmetric)
-                    [P.EYE_L_SMILE]:  0,
+                    // Nearly-closed eyes — undeniable tired look
+                    [P.EYE_L_OPEN]:   0.05,   // almost fully shut
+                    [P.EYE_R_OPEN]:   0.05,
+                    [P.EYE_L_SMILE]:  0,       // no smile — purely tired
                     [P.EYE_R_SMILE]:  0,
-                    [P.MOUTH_OPEN_Y]: 0.25,   // lethargic slack jaw
-                    [P.MOUTH_FORM]:  -0.15,   // corners slightly down — tired not happy
-                    [P.BROW_L_Y]:    -0.5,
-                    [P.BROW_R_Y]:    -0.5,
-                    [P.ANGLE_Y]:     -12,     // head drooping forward
-                    [P.ANGLE_Z]:     -10,
+                    [P.MOUTH_FORM]:  -0.20,   // slack corners — tired not happy
+                    [P.MOUTH_OPEN_Y]: 0.20,   // slack jaw / about to yawn
+                    [P.BROW_L_Y]:    -0.70,   // heavy drooped brows (both — only L exists)
+                    [P.ANGLE_Y]:     -14,     // head drooping forward
+                    [P.ANGLE_Z]:     -11,
                 },
                 smug: {
-                    // Asymmetric knowing look — one lidded eye, one raised arch brow
-                    [P.EYE_L_OPEN]:   0.45,   // left eye heavy-lidded
-                    [P.EYE_R_OPEN]:   0.72,
-                    [P.EYE_L_SMILE]:  0.35,   // soft smug squint (at cap)
-                    [P.EYE_R_SMILE]:  0.10,
-                    [P.MOUTH_FORM]:   0.50,   // half-smile
-                    [P.BROW_L_Y]:     0.85,   // arched raised brow — the smug tell
-                    [P.BROW_R_Y]:    -0.35,
-                    [P.BROW_L_ANGLE]: 0.30,   // arch shape
-                    [P.ANGLE_X]:      6,
-                    [P.ANGLE_Z]:      5,
+                    // Alexia has only ONE brow param — can't do classic one-raised-brow.
+                    // Use eye asymmetry + head tilt back (looking DOWN at you) as the tell.
+                    [P.EYE_L_OPEN]:   0.38,   // very lidded left eye
+                    [P.EYE_R_OPEN]:   0.82,   // right eye more open — asymmetric
+                    [P.EYE_L_SMILE]:  0.35,   // squint on the lidded side
+                    [P.EYE_R_SMILE]:  0.05,   // less smile on other
+                    [P.MOUTH_FORM]:   0.60,   // confident full smile
+                    [P.BROW_L_Y]:     0.70,   // both brows up — raised arch look
+                    [P.BROW_L_FORM]: -0.50,   // brow deformation for arch shape
+                    [P.ANGLE_X]:      8,      // head tilted back — looking down at them
+                    [P.ANGLE_Z]:      6,      // cocky head roll
+                },
+                playful: {
+                    // Open mouth + strong tilt — distinctly different from smug/happy
+                    [P.EYE_L_OPEN]:   0.85,
+                    [P.EYE_R_OPEN]:   0.50,   // one eye more closed — cheeky asymmetry
+                    [P.EYE_L_SMILE]:  0.35,
+                    [P.EYE_R_SMILE]:  0.35,
+                    [P.MOUTH_FORM]:   0.60,
+                    [P.MOUTH_OPEN_Y]: 0.40,   // open laughing mouth — key differentiator
+                    [P.BROW_L_Y]:     0.35,   // both brows slightly raised
+                    [P.ANGLE_Z]:      12,     // strong playful tilt
                 },
             };
 
