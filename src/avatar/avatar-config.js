@@ -99,8 +99,7 @@ export const PARAM_IDS = Object.freeze({
     ALEXIA_EYE_SQUINT_L:'Param51',     // 挤眼睛 L — smug/happy squint
     ALEXIA_EYE_SQUINT_R:'Param52',     // 挤眼睛 R — smug/happy squint
     ALEXIA_CHEEK_PUFF:  'Param21',     // 鼓脸 — pouty/flustered
-    ALEXIA_BIG_SMILE:   'Param60',     // 大笑 — bright toothy smile (cheerful, distinct from villain grin)
-    ALEXIA_MOUTH_SKEW:  'Param20'      // 歪嘴 — mouth skew/tilt X (asymmetric smug/teasing expression)
+    ALEXIA_BIG_SMILE:   'Param60'      // 大笑 — bright toothy smile (cheerful, distinct from villain grin)
 });
 
 // State behavior presets

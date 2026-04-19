@@ -522,15 +522,8 @@ export class EmotionMapper {
             if (stripped[PARAM_IDS.EYE_R_SMILE] > SMILE_CAP) stripped[PARAM_IDS.EYE_R_SMILE] = SMILE_CAP;
             // Also cap MOUTH_FORM — her mouth rig is more expressive; full 1.0 looks jarring
             if (stripped[PARAM_IDS.MOUTH_FORM] > 0.6) stripped[PARAM_IDS.MOUTH_FORM] = 0.6;
-            // Alexia-specific continuous param overrides — not binary overlays but
-            // improve expression fidelity using her unique rig params
-            const ALEXIA_BASE_OVERRIDES = {
-                smug:    { [PARAM_IDS.ALEXIA_MOUTH_SKEW]: 0.65 }, // cocky asymmetric mouth tilt
-                playful: { [PARAM_IDS.ALEXIA_MOUTH_SKEW]: 0.35 }, // cheeky subtle skew
-            };
-            const alexiaBaseOverrides = ALEXIA_BASE_OVERRIDES[label] || {};
             const alexiaLayer = this._alexiaOverlayFor(label);
-            preset = { ...stripped, ...alexiaBaseOverrides, ...alexiaLayer };
+            preset = { ...stripped, ...alexiaLayer };
         }
 
         // Overlay/visibility params are binary switches — they must reach their
@@ -591,15 +584,17 @@ export class EmotionMapper {
             melancholic: { [A.ALEXIA_SWEAT]: V },
             lonely:      { [A.ALEXIA_CRY]: V },
             // ── Confused / disoriented ─────────────────────────────────────────
-            confused:    { [A.ALEXIA_QUESTION]: V },
+            curious:     { [A.ALEXIA_QUESTION]: V },                                      // question mark = curiosity
+            confused:    { [A.ALEXIA_QUESTION]: V, [A.ALEXIA_DIZZY]: V },
             surprised:   { [A.ALEXIA_QUESTION]: V, [A.ALEXIA_DIZZY]: V },
             scared:      { [A.ALEXIA_SWEAT]: V, [A.ALEXIA_DIZZY]: V },
             // ── Anger / negative ───────────────────────────────────────────────
+            determined:  { [A.ALEXIA_ANGRY]: V },                                         // anger vein = intense focus
             anger:       { [A.ALEXIA_ANGRY]: V },
             angry:       { [A.ALEXIA_ANGRY]: V },
             dark:        { [A.ALEXIA_ANGRY]: V },
             menacing:    { [A.ALEXIA_ANGRY]: V },
-            disgusted:   { [A.ALEXIA_CHEEK_PUFF]: V },
+            disgusted:   { [A.ALEXIA_ANGRY]: V, [A.ALEXIA_CHEEK_PUFF]: V },              // anger + puffed cheek
         };
         return map[label] || {};
     }

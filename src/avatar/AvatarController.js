@@ -183,9 +183,8 @@ export class AvatarController {
                 // Alexia overlay params that affect the mouth rig — skip during TTS
                 // so they don't fight ParamMouthOpenY lip sync animation
                 const isSpeaking = controller.mouthSync?.isActive?.();
-                // Param46 = TONGUE (hidden during speech), Param20 = MOUTH_SKEW
-                // (skew zeroed during speech so lip sync isn't tilted)
-                const MOUTH_OVERLAYS = new Set(['Param46', 'Param20']);
+                // Param46 = TONGUE — actively zeroed during speech so it stays hidden while speaking
+                const MOUTH_OVERLAYS = new Set(['Param46']);
 
                 // On Alexia: actively zero every overlay NOT in the current emotion
                 // every frame. Once a param is cleaned out of currentEmotionValues,
