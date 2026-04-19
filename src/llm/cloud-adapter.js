@@ -6,6 +6,39 @@
 import { DEFAULT_CONFIG } from './llm-interface.js';
 import { getCloudApiKey, getGeminiModel } from '../settings.js';
 
+/**
+ * Build the Gemini API request body.
+ * Gemma models don't support systemInstruction — the system prompt is
+ * prepended to the user turn as a plain text block instead.
+ */
+function buildRequestBody(systemPrompt, userText, extraConfig = {}) {
+    const model = getGeminiModel();
+    const isGemma = model.startsWith('gemma');
+    const generationConfig = {
+        maxOutputTokens: DEFAULT_CONFIG.maxTokens,
+        temperature: DEFAULT_CONFIG.temperature,
+        stopSequences: ['User:', 'Assistant:'],
+        ...extraConfig
+    };
+
+    if (isGemma) {
+        // Gemma: no systemInstruction field — bake system prompt into user turn
+        return {
+            contents: [{
+                parts: [{ text: `${systemPrompt}\n\n${MODEL_HARDENING_PREFIX}${userText}` }]
+            }],
+            generationConfig
+        };
+    }
+
+    // Gemini: proper system instruction field
+    return {
+        contents: [{ parts: [{ text: MODEL_HARDENING_PREFIX + userText }] }],
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        generationConfig
+    };
+}
+
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 function getEndpoint(action = 'generateContent') {
@@ -49,19 +82,7 @@ const CloudAdapter = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 signal: controller.signal,
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{ text: MODEL_HARDENING_PREFIX + prompt }]
-                    }],
-                    systemInstruction: {
-                        parts: [{ text: systemPrompt }]
-                    },
-                    generationConfig: {
-                        maxOutputTokens: DEFAULT_CONFIG.maxTokens, // Enforce strict token limit
-                        temperature: DEFAULT_CONFIG.temperature,
-                        stopSequences: ["User:", "Assistant:"] // Removed \n\n to allow multi-paragraph responses
-                    }
-                })
+                body: JSON.stringify(buildRequestBody(systemPrompt, prompt))
             });
 
             clearTimeout(timeoutId);
@@ -121,15 +142,7 @@ const CloudAdapter = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 signal: controller.signal,
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: MODEL_HARDENING_PREFIX + prompt }] }],
-                    systemInstruction: { parts: [{ text: systemPrompt }] },
-                    generationConfig: {
-                        maxOutputTokens: DEFAULT_CONFIG.maxTokens,
-                        temperature: DEFAULT_CONFIG.temperature,
-                        stopSequences: ['User:', 'Assistant:']
-                    }
-                })
+                body: JSON.stringify(buildRequestBody(systemPrompt, prompt))
             });
 
             clearTimeout(timeoutId);
