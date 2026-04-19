@@ -91,7 +91,6 @@ export const PARAM_IDS = Object.freeze({
     ALEXIA_SWEAT:       'Param44',     // 汗 — sweat drop (nervous/flustered)
     ALEXIA_QUESTION:    'Param43',     // 问号 — question mark (confused)
     ALEXIA_TONGUE:      'Param46',     // 舌头 — tongue out (playful)
-    ALEXIA_GRIN:        'Param54',     // 咧嘴笑 — wide grin
     ALEXIA_STAR_EYES:   'Param55',     // 星星眼 — star eyes (love/excited)
     ALEXIA_DIZZY:       'Param56',     // 晕 — dizzy swirls (overwhelmed)
     ALEXIA_ANGRY:       'Param57',     // 生气 — anger vein

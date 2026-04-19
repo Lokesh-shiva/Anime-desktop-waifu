@@ -1554,13 +1554,19 @@ VoiceService.onStart(() => {
 // Real audio duration → reschedule arc beats against actual playback length.
 // canplaythrough fires near the start of playback (elapsed ≈ 0), so we treat
 // it as the true t=0 anchor and remap all beats against real ms.
+// NOTE: beat.at === 0.0 already fired during the initial estimate schedule in
+// playEmotionArc(). We skip those here to prevent the double-fire that was
+// causing the avatar to flash the first expression, reset, then fire again.
 VoiceService.onDuration((realMs) => {
     if (!_pendingArc || _pendingArc.length === 0) return;
-    console.log(`[Arc] Rescheduling with real duration: ${realMs.toFixed(0)}ms`);
     const arc   = _pendingArc;
     const hints = _pendingArcHints;
     _pendingArc = null; // prevent double-reschedule if canplaythrough fires again
-    _scheduleArcBeats(arc, realMs, hints, 0);
+    // Filter out the at=0 beat — it already fired on the estimate schedule
+    const remainingBeats = arc.filter(b => b.at > 0);
+    if (remainingBeats.length === 0) return;
+    console.log(`[Arc] Rescheduling ${remainingBeats.length} remaining beats with real duration: ${realMs.toFixed(0)}ms`);
+    _scheduleArcBeats(remainingBeats, realMs, hints, 0);
 });
 
 VoiceService.onEnd(() => {

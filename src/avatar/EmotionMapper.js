@@ -536,7 +536,7 @@ export class EmotionMapper {
             PARAM_IDS.TONGUE_VIS,   // Paramtoungevis  — tongue visibility (binary switch)
             // Alexia overlays — all Add-blend binary switches at value 30
             PARAM_IDS.ALEXIA_SWEAT, PARAM_IDS.ALEXIA_QUESTION, PARAM_IDS.ALEXIA_TONGUE,
-            PARAM_IDS.ALEXIA_GRIN, PARAM_IDS.ALEXIA_STAR_EYES, PARAM_IDS.ALEXIA_DIZZY,
+            PARAM_IDS.ALEXIA_STAR_EYES, PARAM_IDS.ALEXIA_DIZZY,
             PARAM_IDS.ALEXIA_ANGRY, PARAM_IDS.ALEXIA_BLUSH, PARAM_IDS.ALEXIA_CRY,
             PARAM_IDS.ALEXIA_EYE_SQUINT_L, PARAM_IDS.ALEXIA_EYE_SQUINT_R,
             PARAM_IDS.ALEXIA_CHEEK_PUFF
@@ -570,13 +570,13 @@ export class EmotionMapper {
             crying:      { [A.ALEXIA_CRY]: V, [A.ALEXIA_BLUSH]: V },
             sad:         { [A.ALEXIA_CRY]: V },
             melancholic: { [A.ALEXIA_SWEAT]: V },
-            playful:     { [A.ALEXIA_TONGUE]: V, [A.ALEXIA_GRIN]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
+            playful:     { [A.ALEXIA_TONGUE]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
             anger:       { [A.ALEXIA_ANGRY]: V },
             angry:       { [A.ALEXIA_ANGRY]: V },
             dark:        { [A.ALEXIA_ANGRY]: V },
             menacing:    { [A.ALEXIA_ANGRY]: V },
             surprised:   { [A.ALEXIA_QUESTION]: V, [A.ALEXIA_DIZZY]: V },
-            smug:        { [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V, [A.ALEXIA_GRIN]: V },
+            smug:        { [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
             hesitant:    { [A.ALEXIA_SWEAT]: V },
             grateful:    { [A.ALEXIA_BLUSH]: V, [A.ALEXIA_EYE_SQUINT_L]: V, [A.ALEXIA_EYE_SQUINT_R]: V },
             tender:      { [A.ALEXIA_BLUSH]: V },
