@@ -1929,6 +1929,10 @@ const TypingReactor = {
                 actionHints: { perkUp: true },
             });
             this._lastReactionTime = now;
+            // Auto-release the perk after ~1.4s so cursor tracking returns to normal
+            setTimeout(() => {
+                AvatarBridge.sendComplexIntent({ emotion: { label: 'neutral', intensity: 0.3 } });
+            }, 1400);
         }
 
         // Reset the pause timer — fires if user stops typing mid-message
@@ -1969,7 +1973,11 @@ window.testStretch    = () => runStretchAnimation();
 window.testLookAround = () => runLookAroundAnimation();
 window.testSleepy     = () => runSleepyAnimation();
 window.testGesture    = () => runIdleGesture();
-window.testPerkUp     = () => AvatarBridge.sendComplexIntent({ emotion: { label: 'curious', intensity: 0.5 }, actionHints: { perkUp: true } });
+window.testPerkUp     = async () => {
+    AvatarBridge.sendComplexIntent({ emotion: { label: 'curious', intensity: 0.6 }, actionHints: { perkUp: true } });
+    await new Promise(r => setTimeout(r, 1400));
+    AvatarBridge.sendComplexIntent({ emotion: { label: 'neutral', intensity: 0.3 } });
+};
 
 // Listen for Capabilities
 if (window.electronAPI && window.electronAPI.onAvatarCapabilities) {
