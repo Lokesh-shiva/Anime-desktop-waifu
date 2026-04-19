@@ -563,7 +563,7 @@ async function handleIdleMessage({ timeOfDay, timeContext, minutesSilent, messag
             getVisionContext()
         );
 
-        const responseObj = await BrainRouter.generate(idlePrompt, { systemInstruction });
+        const responseObj = await BrainRouter.generateStreaming(idlePrompt, { systemInstruction }, null, null);
 
         // Log idle interaction to memory with a neutral placeholder so it reads
         // naturally in the next conversation's context window
@@ -632,7 +632,7 @@ async function handleCameraReaction(type, hint) {
         const presenceHints     = { timeOfDay: getTimeOfDayTone(), inputRhythm: null };
         const systemInstruction = buildSystemPrompt(memoryContext, presenceHints, memoryManager.recentMessages, getVisionContext());
 
-        const responseObj = await BrainRouter.generate(idlePrompt, { systemInstruction });
+        const responseObj = await BrainRouter.generateStreaming(idlePrompt, { systemInstruction }, null, null);
         memoryManager.addInteraction('[camera glance]', responseObj.text);
         memoryManager.recordInteractionSentiment(responseObj.emotionArc);
         StateMachine.transition(EVENTS.LLM_RESPONSE, responseObj);
@@ -707,7 +707,7 @@ async function handleStartupGreeting() {
         const presenceHints      = { timeOfDay: getTimeOfDayTone(), inputRhythm: null };
         const systemInstruction  = buildSystemPrompt(memoryContext, presenceHints, memoryManager.recentMessages, getVisionContext());
 
-        const responseObj = await BrainRouter.generate(greetPrompt, { systemInstruction });
+        const responseObj = await BrainRouter.generateStreaming(greetPrompt, { systemInstruction }, null, null);
         memoryManager.addInteraction('[app opened]', responseObj.text);
         memoryManager.recordInteractionSentiment(responseObj.emotionArc);
         StateMachine.transition(EVENTS.LLM_RESPONSE, responseObj);
