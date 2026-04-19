@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, nativeImage, desktopCapturer } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, nativeImage, desktopCapturer, screen } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -534,6 +534,24 @@ ipcMain.on('avatar-move-window', (event, { x, y }) => {
     if (avatarWindow && !avatarWindow.isDestroyed()) {
         avatarWindow.setPosition(Math.round(x), Math.round(y));
     }
+});
+
+/**
+ * Returns which side the avatar window is closer to on its current display.
+ * Used by the renderer to decide which way to bend during a peek (away from the edge).
+ * @returns {{ peekDirection: 'left' | 'right' }}
+ */
+ipcMain.handle('avatar-edge-info', async () => {
+    if (!avatarWindow || avatarWindow.isDestroyed()) return { peekDirection: 'left' };
+    const [x, y]   = avatarWindow.getPosition();
+    const [w, h]   = avatarWindow.getSize();
+    const display  = screen.getDisplayMatching({ x, y, width: w, height: h });
+    const wa       = display.workArea;
+    const center   = x + w / 2;
+    const distLeft  = center - wa.x;
+    const distRight = (wa.x + wa.width) - center;
+    // Bend AWAY from the closer edge so the peek motion goes toward open space
+    return { peekDirection: distLeft < distRight ? 'right' : 'left' };
 });
 
 /**

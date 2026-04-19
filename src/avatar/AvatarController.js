@@ -426,8 +426,11 @@ export class AvatarController {
                 // Track peerForward so cursor tracking releases ANGLE_Y/BODY_ANGLE_Y
                 // and the lean stays stable (no jitter from mouse movement on those axes).
                 this._peerForwardActive = !!intent.actionHints.peerForward;
+                // Same idea for peek: lock the X-axis bend params from cursor noise.
+                this._peekActive = !!(intent.actionHints.peekLeft || intent.actionHints.peekRight);
             } else {
                 this._peerForwardActive = false;
+                this._peekActive = false;
             }
 
             if (Object.keys(paramPreset).length > 0) {
@@ -481,6 +484,17 @@ export class AvatarController {
         // shy / hesitant → gentle head tilt (gaze handled by GazeAnimator)
         if (hints.shy || hints.hesitant) {
             if (caps.hasAngleZ) overlay[PARAM_IDS.ANGLE_Z] = -6;
+        }
+
+        // peekLeft / peekRight → strong sideways body bend (waist + head follow),
+        // like she's leaning around an invisible corner to peek out. Used by the
+        // silent peek idle behavior — no words, just expressive motion.
+        if (hints.peekLeft || hints.peekRight) {
+            const sign = hints.peekLeft ? -1 : 1;
+            if (caps.hasBodyAngleX) overlay[PARAM_IDS.BODY_ANGLE_X] = 22 * sign;
+            if (caps.hasHeadAngle)  overlay[PARAM_IDS.ANGLE_X]      = 24 * sign;
+            if (caps.hasAngleZ)     overlay[PARAM_IDS.ANGLE_Z]      = 12 * sign;
+            if (caps.hasEyeBallXY)  overlay[PARAM_IDS.EYE_BALL_X]   = 0.6 * sign;
         }
 
         // peerForward → head pitches down + body leans forward (toward screen)
@@ -797,6 +811,13 @@ export class AvatarController {
             delete inf[PARAM_IDS.ANGLE_Y];
             delete inf[PARAM_IDS.BODY_ANGLE_Y];
             delete inf[PARAM_IDS.EYE_BALL_Y];
+        }
+        // Lock the bend axes during peek so the body-lean stays stable
+        if (this._peekActive) {
+            inf = { ...inf };
+            delete inf[PARAM_IDS.ANGLE_X];
+            delete inf[PARAM_IDS.BODY_ANGLE_X];
+            delete inf[PARAM_IDS.EYE_BALL_X];
         }
         this.cursorInfluence = inf;
     }

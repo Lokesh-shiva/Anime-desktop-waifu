@@ -543,7 +543,15 @@ async function handleIdleMessage({ timeOfDay, timeContext, minutesSilent, messag
     // Decide attention-seeking mode BEFORE building the prompt so it can shape it
     const roll = Math.random();
     const doAttentionAnim = force || (minutesSilent >= 3 && roll < 0.40);
-    console.log(`[Idle] Attention roll: ${roll.toFixed(2)} force=${!!force} → ${doAttentionAnim ? 'CREEP ANIM' : 'normal message'}`);
+    // Peek = silent expression, replaces a proactive message ~15% of the time
+    const peekRoll = Math.random();
+    const doPeek = !force && !doAttentionAnim && minutesSilent >= 3 && peekRoll < 0.15;
+    console.log(`[Idle] Attention roll: ${roll.toFixed(2)} peek: ${peekRoll.toFixed(2)} force=${!!force} → ${doAttentionAnim ? 'CREEP ANIM' : doPeek ? 'PEEK (silent)' : 'normal message'}`);
+
+    if (doPeek) {
+        await runPeekAnimation();
+        return;  // No LLM call — peek itself is the expression
+    }
 
     // Internal trigger prompt — never shown in the chat bubble
     const idlePrompt = [
@@ -1836,8 +1844,29 @@ WeatherContext.init().catch(() => {});
 // Startup greeting — delayed to let avatar model + memory finish loading
 setTimeout(() => handleStartupGreeting(), 3000);
 
+// Silent peek — Miko bends her body sideways like she's leaning around a corner.
+// Direction biased AWAY from the screen edge she's nearest to (so she bends into open space).
+async function runPeekAnimation() {
+    let direction = 'left';
+    try {
+        const info = await window.electronAPI.getAvatarEdgeInfo();
+        if (info?.peekDirection) direction = info.peekDirection;
+    } catch (e) { /* fall back to left */ }
+    console.log(`[Peek] body-bend ${direction}`);
+    const hint = direction === 'left' ? { peekLeft: true } : { peekRight: true };
+    AvatarBridge.sendComplexIntent({
+        emotion: { label: 'curious', intensity: 0.7 },
+        actionHints: hint,
+    });
+    await new Promise(r => setTimeout(r, 3200));
+    // Release — clear hints by sending a neutral emotion at low intensity
+    AvatarBridge.sendComplexIntent({ emotion: { label: 'neutral', intensity: 0.3 } });
+}
+
 // Dev helper — type testAttention() in the DevTools console to force the lean-in sequence
 window.testAttention = () => handleIdleMessage({ minutesSilent: 5, messageCount: 99, timeOfDay: getTimeOfDayTone(), timeContext: getRichTimeContext(), force: true });
+// Dev helper — type testPeek() in the DevTools console to force the silent body-bend peek
+window.testPeek = () => runPeekAnimation();
 
 // Listen for Capabilities
 if (window.electronAPI && window.electronAPI.onAvatarCapabilities) {

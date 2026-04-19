@@ -26,5 +26,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     captureScreen: () => ipcRenderer.invoke('capture-screen'),
 
     // Quit the app from renderer
-    quitApp: () => ipcRenderer.send('quit-app')
+    quitApp: () => ipcRenderer.send('quit-app'),
+
+    // Avatar edge info — returns which side the window is closer to ('left' | 'right')
+    getAvatarEdgeInfo: () => ipcRenderer.invoke('avatar-edge-info')
 });
