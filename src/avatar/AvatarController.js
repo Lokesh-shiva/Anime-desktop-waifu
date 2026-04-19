@@ -288,9 +288,23 @@ export class AvatarController {
                     }
                 }
 
+                // ANGLE params use addParameterValueById (delta on top of motion base).
+                // All other emotion params use setParameterValueById (absolute override).
+                // This eliminates handoff jitter: when ANGLE delta decays to 0 it adds
+                // nothing, so the motion pipeline retakes control seamlessly.
+                const BM_ANGLE_PARAMS = new Set([
+                    'ParamAngleX','ParamAngleY','ParamAngleZ',
+                    'ParamBodyAngleX','ParamBodyAngleY','ParamBodyAngleZ'
+                ]);
                 for (const [paramId, val] of Object.entries(controller.currentEmotionValues)) {
                     if (bmIsSpeaking && BM_MOUTH_OVERLAYS.has(paramId)) continue;
-                    try { coreModel.setParameterValueById(paramId, val); } catch (e) { /* skip */ }
+                    if (BM_ANGLE_PARAMS.has(paramId)) {
+                        if (Math.abs(val) > 0.001) {
+                            try { coreModel.addParameterValueById(paramId, val); } catch (e) { /* skip */ }
+                        }
+                    } else {
+                        try { coreModel.setParameterValueById(paramId, val); } catch (e) { /* skip */ }
+                    }
                 }
 
                 // BLINK — applied after emotion params so it can override EYE_OPEN.
@@ -654,6 +668,15 @@ export class AvatarController {
             'Param51','Param52','Param55','Param56','Param57','Param58','Param59','Param60'
         ]);
 
+        // ANGLE params are written additively in beforeModelUpdate (delta on top of
+        // the motion pipeline's base angle). This means their tracked values are DELTAS
+        // (not absolutes), so they must always start from 0 when first encountered —
+        // NOT from the core model value (which includes the motion's base angle).
+        const ANGLE_PARAMS = new Set([
+            'ParamAngleX','ParamAngleY','ParamAngleZ',
+            'ParamBodyAngleX','ParamBodyAngleY','ParamBodyAngleZ'
+        ]);
+
         this.transitionStartValues = {};
         for (const paramId of allParamIds) {
             // Alexia overlays not in the new preset: snap start to 0 → clears instantly
@@ -662,8 +685,12 @@ export class AvatarController {
                 continue;
             }
             if (paramId in this.currentEmotionValues) {
-                // We've been managing this param — use our tracked value
+                // We've been managing this param — use our tracked value (delta for ANGLEs)
                 this.transitionStartValues[paramId] = this.currentEmotionValues[paramId];
+            } else if (ANGLE_PARAMS.has(paramId)) {
+                // ANGLE params use additive deltas — first use always starts from 0,
+                // never from the model value (which would compound with the motion base)
+                this.transitionStartValues[paramId] = 0;
             } else {
                 // First time touching this param — read its REAL value from the model
                 const realValue = this._readCoreParamValue(coreModel, paramId);
