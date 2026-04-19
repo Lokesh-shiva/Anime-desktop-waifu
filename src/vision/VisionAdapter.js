@@ -41,7 +41,7 @@ async function callGeminiVision(base64Jpeg, prompt) {
                 { text: prompt }
             ]
         }],
-        generationConfig: { maxOutputTokens: 512, temperature: 0.2 }
+        generationConfig: { maxOutputTokens: 1024, temperature: 0.2 }
     };
 
     const response = await fetch(`${GEMINI_VISION_ENDPOINT}?key=${apiKey}`, {

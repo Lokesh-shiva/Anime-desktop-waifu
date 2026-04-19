@@ -190,6 +190,12 @@ export const BrainRouter = {
     _parseLLMResponse(rawText) {
         let parsed = null;
 
+        // Strip the leading [EMOTION:label:intensity] tag line produced by cloud models.
+        // The streaming path strips it during chunk processing; the non-streaming
+        // generate() path passes raw text here, so we must strip it before parsing.
+        const strippedText = rawText.replace(/^\[EMOTION:[^\]\n]+\]\n?/, '').trim();
+        rawText = strippedText;
+
         // Strategy 1: Pure JSON parse (cloud models usually return clean JSON)
         try {
             parsed = JSON.parse(rawText);
