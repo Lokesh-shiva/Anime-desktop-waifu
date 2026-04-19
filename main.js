@@ -71,20 +71,10 @@ function createTray() {
     tray = new Tray(icon);
     tray.setToolTip('Waifu Assistant — Miko');
 
-    const contextMenu = Menu.buildFromTemplate([
-        {
-            label: 'Show Miko',
-            click: () => { mainWindow?.show(); mainWindow?.focus(); }
-        },
-        { type: 'separator' },
-        {
-            label: 'Quit',
-            click: forceQuit
-        }
-    ]);
-    tray.setContextMenu(contextMenu);
+    // Build initial menu (avatar not yet created, so OFF)
+    rebuildTrayMenu();
 
-    // Left-click: toggle window visibility
+    // Left-click: toggle main window visibility
     tray.on('click', () => {
         if (mainWindow?.isVisible()) {
             mainWindow.hide();
@@ -94,7 +84,7 @@ function createTray() {
         }
     });
 
-    // Double-click: always show
+    // Double-click: always show main window
     tray.on('double-click', () => {
         mainWindow?.show();
         mainWindow?.focus();
@@ -111,20 +101,86 @@ function forceQuit() {
     app.quit();
 }
 
+// ── Avatar settings helpers ───────────────────────────────────────────────
+// Thin wrappers around avatar-settings.json so every caller shares one path.
+function _avatarSettingsPath() {
+    return path.join(app.getPath('userData'), 'avatar-settings.json');
+}
+function loadAvatarSettings() {
+    try {
+        const p = _avatarSettingsPath();
+        if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf-8'));
+    } catch (e) { /* ignore */ }
+    return {};
+}
+function saveAvatarSettings(updates) {
+    try {
+        const p = _avatarSettingsPath();
+        const current = loadAvatarSettings();
+        fs.writeFileSync(p, JSON.stringify({ ...current, ...updates }, null, 2));
+    } catch (e) { console.error('[Main] Failed to save avatar settings:', e); }
+}
+
+/**
+ * Rebuild the tray context menu so the Avatar toggle label stays in sync.
+ * Called on creation and whenever the avatar window is shown/hidden/closed.
+ */
+function rebuildTrayMenu() {
+    if (!tray) return;
+    const avatarOn = avatarWindow && !avatarWindow.isDestroyed() && avatarWindow.isVisible();
+    const contextMenu = Menu.buildFromTemplate([
+        {
+            label: 'Show Miko',
+            click: () => { mainWindow?.show(); mainWindow?.focus(); }
+        },
+        { type: 'separator' },
+        {
+            label: `Avatar: ${avatarOn ? 'ON  ✓' : 'OFF'}`,
+            click: () => {
+                if (avatarWindow && !avatarWindow.isDestroyed()) {
+                    if (avatarWindow.isVisible()) {
+                        avatarWindow.hide();
+                    } else {
+                        avatarWindow.show();
+                    }
+                } else {
+                    createAvatarWindow();
+                }
+                // Rebuild after a tick so isVisible() reflects the new state
+                setTimeout(rebuildTrayMenu, 80);
+            }
+        },
+        { type: 'separator' },
+        {
+            label: 'Quit',
+            click: forceQuit
+        }
+    ]);
+    tray.setContextMenu(contextMenu);
+}
+
 /**
  * Create the avatar overlay window
  */
 function createAvatarWindow() {
     if (avatarWindow && !avatarWindow.isDestroyed()) {
         avatarWindow.show();
+        rebuildTrayMenu();
         return;
     }
 
+    // Restore last saved window bounds, fall back to sensible defaults
+    const saved = loadAvatarSettings();
+    const winX      = typeof saved.windowX      === 'number' ? saved.windowX      : 50;
+    const winY      = typeof saved.windowY      === 'number' ? saved.windowY      : 100;
+    const winWidth  = typeof saved.windowWidth  === 'number' ? saved.windowWidth  : 400;
+    const winHeight = typeof saved.windowHeight === 'number' ? saved.windowHeight : 600;
+
     avatarWindow = new BrowserWindow({
-        width: 400,
-        height: 600,
-        x: 50,
-        y: 100,
+        width:  winWidth,
+        height: winHeight,
+        x: winX,
+        y: winY,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
@@ -145,16 +201,24 @@ function createAvatarWindow() {
     // Open DevTools for avatar window debugging
     avatarWindow.webContents.openDevTools({ mode: 'detach' });
 
-    // Make window click-through (optional - user can toggle this)
-    // avatarWindow.setIgnoreMouseEvents(true, { forward: true });
+    // Persist window position and size whenever the user moves or resizes
+    const _saveBounds = () => {
+        if (!avatarWindow || avatarWindow.isDestroyed()) return;
+        const [x, y]         = avatarWindow.getPosition();
+        const [width, height] = avatarWindow.getSize();
+        saveAvatarSettings({ windowX: x, windowY: y, windowWidth: width, windowHeight: height });
+    };
+    avatarWindow.on('moved',   _saveBounds);
+    avatarWindow.on('resized', _saveBounds);
 
-    avatarWindow.on('closed', () => {
-        avatarWindow = null;
-    });
+    avatarWindow.on('show',   () => rebuildTrayMenu());
+    avatarWindow.on('hide',   () => rebuildTrayMenu());
+    avatarWindow.on('closed', () => { avatarWindow = null; rebuildTrayMenu(); });
 
     // Hide initially until model loads
     avatarWindow.once('ready-to-show', () => {
         avatarWindow.show();
+        rebuildTrayMenu();
     });
 }
 
@@ -470,6 +534,24 @@ ipcMain.on('avatar-move-window', (event, { x, y }) => {
     if (avatarWindow && !avatarWindow.isDestroyed()) {
         avatarWindow.setPosition(Math.round(x), Math.round(y));
     }
+});
+
+/**
+ * Persist model zoom scale (called by renderer after wheel zoom settles)
+ */
+ipcMain.handle('save-avatar-transform', async (event, data) => {
+    if (data && typeof data.scale === 'number') {
+        saveAvatarSettings({ modelScale: data.scale });
+    }
+    return true;
+});
+
+/**
+ * Load saved model zoom scale for the renderer on startup
+ */
+ipcMain.handle('load-avatar-transform', async () => {
+    const settings = loadAvatarSettings();
+    return { scale: typeof settings.modelScale === 'number' ? settings.modelScale : 1.0 };
 });
 
 // ============================================

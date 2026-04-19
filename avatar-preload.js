@@ -36,5 +36,9 @@ contextBridge.exposeInMainWorld('avatarAPI', {
         ipcRenderer.on('avatar-load-model', (_, path) => callback(path));
     },
     moveWindow: (pos) => ipcRenderer.send('avatar-move-window', pos),
-    sendCapabilities: (caps) => ipcRenderer.send('avatar-capabilities', caps)
+    sendCapabilities: (caps) => ipcRenderer.send('avatar-capabilities', caps),
+
+    // Persist model zoom/scale across restarts
+    saveTransform: (data) => ipcRenderer.invoke('save-avatar-transform', data),
+    loadTransform: () => ipcRenderer.invoke('load-avatar-transform'),
 });

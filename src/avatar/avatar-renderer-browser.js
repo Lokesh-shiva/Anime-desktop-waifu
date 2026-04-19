@@ -258,9 +258,17 @@ async function loadModel(modelPath) {
         // Detect Capabilities using the new structured system
         await avatarController.onModelLoaded(model, modelPath);
 
-        // Position
+        // Position — restore saved zoom first so fitModelToView uses it
         initialModelWidth = model.internalModel.width;
         initialModelHeight = model.internalModel.height;
+        if (window.avatarAPI?.loadTransform) {
+            try {
+                const saved = await window.avatarAPI.loadTransform();
+                if (saved?.scale && typeof saved.scale === 'number') {
+                    zoomState.currentScale = saved.scale;
+                }
+            } catch (e) { /* use default zoom */ }
+        }
         fitModelToView(document.getElementById('avatar-container'));
 
         app.stage.addChild(model);
@@ -609,6 +617,9 @@ document.addEventListener('mousemove', handleMouseMove);
 // When mouse leaves the window entirely, reset idle timer immediately so head decays fast
 document.addEventListener('mouseleave', () => { cursorLastMoveTime = 0; });
 
+// Debounce timer for saving zoom after wheel stops
+let _zoomSaveTimer = null;
+
 // Scroll/wheel zoom handler
 document.addEventListener('wheel', (e) => {
     if (!zoomState.enabled || !model) return;
@@ -621,6 +632,12 @@ document.addEventListener('wheel', (e) => {
     // Apply via fitModelToView which respects zoom scale
     const container = document.getElementById('avatar-container');
     if (container) fitModelToView(container);
+
+    // Persist zoom 500ms after the wheel stops
+    clearTimeout(_zoomSaveTimer);
+    _zoomSaveTimer = setTimeout(() => {
+        window.avatarAPI?.saveTransform?.({ scale: zoomState.currentScale });
+    }, 500);
 }, { passive: false });
 
 // Resize handling
