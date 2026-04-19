@@ -4,9 +4,16 @@
  */
 
 import { DEFAULT_CONFIG } from './llm-interface.js';
-import { getCloudApiKey } from '../settings.js';
+import { getCloudApiKey, getGeminiModel } from '../settings.js';
 
-const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+function getEndpoint(action = 'generateContent') {
+    return `${GEMINI_BASE}/${getGeminiModel()}:${action}`;
+}
+
+// Kept for isAvailable() health check — always use the faster flash model
+const GEMINI_ENDPOINT = `${GEMINI_BASE}/gemini-2.5-flash:generateContent`;
 
 // Gemini-specific hardening prefix to prevent safety/assistant leaks
 const MODEL_HARDENING_PREFIX = "Stay fully in character. Do not explain, assist, or summarize.\n\n";
@@ -38,7 +45,7 @@ const CloudAdapter = {
             console.log('[Cloud] Sending request to Gemini...');
             console.log('[Cloud] System Prompt Preview:', systemPrompt.slice(0, 200) + '...');
 
-            const response = await fetch(`${GEMINI_ENDPOINT}?key=${apiKey}`, {
+            const response = await fetch(`${getEndpoint()}?key=${apiKey}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 signal: controller.signal,
@@ -109,10 +116,8 @@ const CloudAdapter = {
         const controller   = new AbortController();
         const timeoutId    = setTimeout(() => controller.abort(), DEFAULT_CONFIG.timeout);
 
-        const STREAM_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent';
-
         try {
-            const response = await fetch(`${STREAM_ENDPOINT}?key=${apiKey}&alt=sse`, {
+            const response = await fetch(`${getEndpoint('streamGenerateContent')}?key=${apiKey}&alt=sse`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 signal: controller.signal,

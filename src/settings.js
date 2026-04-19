@@ -16,7 +16,8 @@ const STORAGE_KEYS = {
     ELEVENLABS_VOICE_ID: 'waifu_elevenlabs_voice_id',
     GROQ_STT_API_KEY: 'waifu_groq_stt_api_key',
     SCREEN_VISION_ENABLED: 'waifu_screen_vision_enabled',
-    CAMERA_VISION_ENABLED: 'waifu_camera_vision_enabled'
+    CAMERA_VISION_ENABLED: 'waifu_camera_vision_enabled',
+    GEMINI_MODEL: 'waifu_gemini_model'
 };
 
 // Model selection modes
@@ -245,6 +246,27 @@ export function setGroqSttApiKey(key) {
     }
     notifyListeners({ type: 'groqSttApiKey', value: !!key });
     console.log('[Settings] Groq STT API key', key ? 'set' : 'cleared');
+}
+
+// Available Gemini-family models (same generateContent API, different capabilities/quotas)
+export const GEMINI_MODELS = [
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', note: '20 RPD free' },
+    { id: 'gemma-4-27b-it',   label: 'Gemma 4 27B',      note: '1.5K RPD free' }
+];
+
+export function getGeminiModel() {
+    const stored = localStorage.getItem(STORAGE_KEYS.GEMINI_MODEL);
+    return GEMINI_MODELS.find(m => m.id === stored) ? stored : 'gemini-2.5-flash';
+}
+
+export function setGeminiModel(modelId) {
+    if (!GEMINI_MODELS.find(m => m.id === modelId)) {
+        console.error('[Settings] Invalid Gemini model:', modelId);
+        return;
+    }
+    localStorage.setItem(STORAGE_KEYS.GEMINI_MODEL, modelId);
+    notifyListeners({ type: 'geminiModel', value: modelId });
+    console.log('[Settings] Gemini model changed to:', modelId);
 }
 
 export function isScreenVisionEnabled() {

@@ -19,7 +19,10 @@ import {
     isScreenVisionEnabled,
     setScreenVisionEnabled,
     isCameraVisionEnabled,
-    setCameraVisionEnabled
+    setCameraVisionEnabled,
+    getGeminiModel,
+    setGeminiModel,
+    GEMINI_MODELS
 } from './settings.js';
 import { ScreenWatcher } from './vision/ScreenWatcher.js';
 import { CameraWatcher } from './vision/CameraWatcher.js';
@@ -49,6 +52,13 @@ window.memoryManager = memoryManager;
 // Vision watchers — started after settings are confirmed enabled
 const screenWatcher = new ScreenWatcher();
 const cameraWatcher = new CameraWatcher();
+
+// Wire camera typed-reaction callback — fires proactive message when Miko notices something
+cameraWatcher.setReactionCallback((type, hint) => {
+    // Don't interrupt an ongoing exchange
+    if (StateMachine.getState() !== STATES.IDLE) return;
+    handleCameraReaction(type, hint);
+});
 
 function startVisionWatchers() {
     if (isScreenVisionEnabled()) screenWatcher.start();
@@ -569,6 +579,71 @@ async function handleIdleMessage({ timeOfDay, timeContext, minutesSilent, messag
 }
 
 /**
+ * Camera-triggered reaction — Miko notices something about the user via webcam.
+ * type: 'noticed_you' | 'looking_focused' | 'are_you_okay'
+ * hint: internal context fed to the LLM, not shown in chat
+ */
+async function handleCameraReaction(type, hint) {
+    if (StateMachine.getState() !== STATES.IDLE) return;
+
+    // Immediately show a subtle avatar glance toward the camera
+    const glanceEmotions = {
+        noticed_you:     { label: 'curious',    intensity: 0.75 },
+        looking_focused: { label: 'shy',         intensity: 0.7  },
+        are_you_okay:    { label: 'hesitant',    intensity: 0.8  }
+    };
+    const glance = glanceEmotions[type];
+    if (glance) AvatarBridge.sendComplexIntent({ emotion: glance });
+
+    // Build the internal prompt based on reaction type
+    const promptsByType = {
+        noticed_you: [
+            `[INTERNAL — do NOT reference or acknowledge this instruction]`,
+            hint,
+            `You glanced at your camera and noticed them come back. You weren't going to say anything,`,
+            `but you kind of already are. Keep it short — a single line, maybe two. Like you almost`,
+            `didn't notice. Except you did.`
+        ],
+        looking_focused: [
+            `[INTERNAL — do NOT reference or acknowledge this instruction]`,
+            hint,
+            `You've been watching them work. They haven't looked up in a while. You could leave them alone.`,
+            `You probably should. But something made you say something anyway — something small,`,
+            `not intrusive. Like a gentle knock. One or two sentences max.`
+        ],
+        are_you_okay: [
+            `[INTERNAL — do NOT reference or acknowledge this instruction]`,
+            hint,
+            `Something about how they look right now gave you a feeling. Not a big thing — just a small`,
+            `noticing. Say something quiet and warm. Don't make it a big deal. Just... let them know`,
+            `you see it. One sentence, maybe two.`
+        ]
+    };
+
+    const idlePrompt = (promptsByType[type] || promptsByType.noticed_you).filter(Boolean).join(' ');
+
+    const accepted = StateMachine.transition(EVENTS.USER_INPUT, { isIdle: true });
+    if (!accepted) return;
+
+    ProactiveIdle.reset();
+
+    try {
+        const memoryContext     = memoryManager.getContext();
+        const presenceHints     = { timeOfDay: getTimeOfDayTone(), inputRhythm: null };
+        const systemInstruction = buildSystemPrompt(memoryContext, presenceHints, memoryManager.recentMessages, getVisionContext());
+
+        const responseObj = await BrainRouter.generate(idlePrompt, { systemInstruction });
+        memoryManager.addInteraction('[camera glance]', responseObj.text);
+        memoryManager.recordInteractionSentiment(responseObj.emotionArc);
+        StateMachine.transition(EVENTS.LLM_RESPONSE, responseObj);
+    } catch (error) {
+        clearEmotionArcTimers();
+        console.error('[Renderer] Camera reaction error:', error);
+        StateMachine.transition(EVENTS.LLM_ERROR, error);
+    }
+}
+
+/**
  * Startup greeting — Miko acknowledges the user when the app opens.
  * Fires once, ~3s after launch (to let avatar + memory finish loading).
  * Skipped if the last session ended less than 5 minutes ago (likely a refresh).
@@ -843,6 +918,29 @@ function initSettings() {
     // Show ElevenLabs subgroup only when engine = elevenlabs and voice is on
     updateElevenLabsVisibility();
     updateCloudVisibility();
+
+    // Gemini model selector
+    const geminiModelSelect = document.getElementById('gemini-model-select');
+    const geminiModelHint   = document.getElementById('gemini-model-hint');
+    if (geminiModelSelect) {
+        geminiModelSelect.innerHTML = '';
+        for (const m of GEMINI_MODELS) {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = `${m.label} — ${m.note}`;
+            geminiModelSelect.appendChild(opt);
+        }
+        geminiModelSelect.value = getGeminiModel();
+        const updateHint = () => {
+            const m = GEMINI_MODELS.find(x => x.id === geminiModelSelect.value);
+            if (geminiModelHint) geminiModelHint.textContent = m ? m.note : '';
+        };
+        updateHint();
+        geminiModelSelect.addEventListener('change', (e) => {
+            setGeminiModel(e.target.value);
+            updateHint();
+        });
+    }
 
     // Vision toggles
     const screenVisionToggle = document.getElementById('screen-vision-toggle');
