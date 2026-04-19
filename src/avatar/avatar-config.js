@@ -99,7 +99,9 @@ export const PARAM_IDS = Object.freeze({
     ALEXIA_EYE_SQUINT_L:'Param51',     // 挤眼睛 L — smug/happy squint
     ALEXIA_EYE_SQUINT_R:'Param52',     // 挤眼睛 R — smug/happy squint
     ALEXIA_CHEEK_PUFF:  'Param21',     // 鼓脸 — pouty/flustered
-    ALEXIA_BIG_SMILE:   'Param60'      // 大笑 — bright toothy smile (cheerful, distinct from villain grin)
+    ALEXIA_BIG_SMILE:   'Param60',     // 大笑 — bright toothy smile (cheerful, distinct from villain grin)
+    ALEXIA_OUTFIT:      'Param16',     // 衣服 — outfit toggle (0 = day clothes, 1 = pajamas)
+    ALEXIA_NIGHTCAP:    'Param17'      // 衣服托帽子 — sleep cap (0 = off, 1 = on)
 });
 
 // State behavior presets

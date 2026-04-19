@@ -77,6 +77,8 @@ export class AvatarController {
         // residual mood (gaze + blink only — no face param override).
         // Baseline fades to neutral after 20min of no new emotion beats.
         this._moodBaseline = { label: null, intensity: 0 };
+        // Night outfit (Alexia only): pajamas + sleep cap forced ON during calm hours.
+        this._nightOutfitActive = false;
         this._baselineFadeTimer = null;
         this._BASELINE_FADE_MS = 20 * 60 * 1000; // 20 minutes
         this._BASELINE_EMA = 0.3;                 // weight of new beat vs existing baseline
@@ -286,6 +288,11 @@ export class AvatarController {
                             try { coreModel.setParameterValueById(paramId, 0); } catch (e) {}
                         }
                     }
+                    // Night outfit: force pajamas + cap on. Reset to 0 by day so the
+                    // expression pipeline can't leak the pajama outfit into daytime.
+                    const outfitVal = controller._nightOutfitActive ? 1 : 0;
+                    try { coreModel.setParameterValueById('Param16', outfitVal); } catch (e) {}
+                    try { coreModel.setParameterValueById('Param17', outfitVal); } catch (e) {}
                 }
 
                 // ANGLE params use addParameterValueById (delta on top of motion base).
@@ -396,6 +403,12 @@ export class AvatarController {
         if (!this.isEnabled || !intent) return;
 
         console.log('[AvatarController] Received intent:', intent);
+
+        // Night outfit toggle (Alexia only — has the pajama + cap params)
+        if (typeof intent.nightOutfit === 'boolean') {
+            this._nightOutfitActive = intent.nightOutfit;
+            console.log(`[AvatarController] Night outfit ${intent.nightOutfit ? 'ON' : 'OFF'}`);
+        }
 
         if (intent.emotion) {
             this.activeEmotion = intent.emotion;

@@ -1866,6 +1866,15 @@ WeatherContext.init().catch(() => {});
 // Startup greeting — delayed to let avatar model + memory finish loading
 setTimeout(() => handleStartupGreeting(), 3000);
 
+// Night outfit — apply pajamas + cap during calm hours (Alexia only; safe no-op for other models).
+// Re-checked every 10 min so transitions across the boundary don't need an app restart.
+function applyNightOutfitForTime() {
+    const isCalm = getTimeOfDayTone() === 'calm';
+    AvatarBridge.sendComplexIntent({ nightOutfit: isCalm });
+}
+setTimeout(applyNightOutfitForTime, 4000);  // initial — after avatar finishes loading
+setInterval(applyNightOutfitForTime, 10 * 60 * 1000);
+
 // Silent peek — Miko bends her body sideways like she's leaning around a corner.
 // Direction biased AWAY from the screen edge she's nearest to (so she bends into open space).
 async function runPeekAnimation() {
