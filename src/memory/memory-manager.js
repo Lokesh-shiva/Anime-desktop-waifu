@@ -136,8 +136,8 @@ class MemoryManager {
      */
     async _load() {
         try {
-            if (window.assistant?.memory) {
-                const startData = await window.assistant.memory.load();
+            if (window.electronAPI?.loadMemory) {
+                const startData = await window.electronAPI.loadMemory();
                 if (startData) {
                     this.facts            = this._migrateFacts(startData.facts || []);
                     this.sessionSummary   = startData.sessionSummary || "";
@@ -382,7 +382,7 @@ class MemoryManager {
      */
     async _save() {
         try {
-            if (window.assistant?.memory) {
+            if (window.electronAPI?.saveMemory) {
                 const data = {
                     facts: this.facts,
                     sessionSummary: this.sessionSummary,
@@ -392,7 +392,7 @@ class MemoryManager {
                     diary: this.diary,
                     lastSeen: Date.now()
                 };
-                await window.assistant.memory.save(data);
+                await window.electronAPI.saveMemory(data);
                 console.log('[Memory] Saved to disk');
             }
         } catch (e) {
@@ -526,19 +526,37 @@ Analyze and update memory.`;
 
             const response = await BrainRouter.generate(analysisPrompt, {
                 systemInstruction: MEMORY_ANALYZER_PROMPT,
-                raw: true
+                raw: true,
+                jsonMode: true
             });
 
             console.log('[Memory] Raw analysis response:', response);
 
-            const jsonMatch = response.match(/\{[\s\S]*\}/);
-            const cleanJson = jsonMatch ? jsonMatch[0] : response;
-
+            // Gemini thinking models output reasoning prose around the JSON.
+            // Use brace-counting to find every top-level {...} block, try each last-first.
             let result;
-            try {
-                result = JSON.parse(cleanJson);
-            } catch (e) {
-                console.error('[Memory] JSON parse failed:', e);
+            const blocks = [];
+            for (let i = 0; i < response.length; i++) {
+                if (response[i] !== '{') continue;
+                let depth = 0, inStr = false, esc = false;
+                for (let j = i; j < response.length; j++) {
+                    const c = response[j];
+                    if (esc)          { esc = false; continue; }
+                    if (c === '\\' && inStr) { esc = true; continue; }
+                    if (c === '"')    { inStr = !inStr; continue; }
+                    if (inStr)        continue;
+                    if (c === '{')    depth++;
+                    else if (c === '}') { depth--; if (depth === 0) { blocks.push(response.slice(i, j + 1)); break; } }
+                }
+            }
+            for (const block of blocks.reverse()) {
+                try {
+                    const parsed = JSON.parse(block);
+                    if (parsed && Array.isArray(parsed.facts)) { result = parsed; break; }
+                } catch { /* try next */ }
+            }
+            if (!result) {
+                console.error('[Memory] JSON extraction failed — no valid block found');
                 return;
             }
 
@@ -605,7 +623,10 @@ Analyze and update memory.`;
     async _writeDiaryEntry(sessionSummary) {
         const DIARY_PROMPT = `You are Miko, a warm AI companion. Write a short private diary entry (2-3 sentences, first person) reflecting on the conversation session summarised below. Be genuine, slightly wistful, and personal — like a real diary. Don't start with "Dear diary". Don't use the word "delve". Output ONLY the diary text, nothing else.\n\nSession: ${sessionSummary}`;
         try {
-            const entry = await BrainRouter.generate(DIARY_PROMPT, { raw: true });
+            let entry = await BrainRouter.generate(DIARY_PROMPT, { raw: true });
+            // BrainRouter may return the full Miko JSON format — extract just the text
+            const jsonMatch = entry.match(/\{[\s\S]*"text"\s*:\s*"([\s\S]*?)"\s*[,}]/);
+            if (jsonMatch) entry = jsonMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
             if (!entry || entry.length < 10) return;
             this.diary.push({ date: new Date().toISOString(), entry: entry.trim() });
             if (this.diary.length > MAX_DIARY_ENTRIES) this.diary.shift();

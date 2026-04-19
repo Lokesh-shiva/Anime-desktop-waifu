@@ -423,6 +423,11 @@ export class AvatarController {
                     console.log('[AvatarController] ActionHints active:', activeHints.join(', '));
                     paramPreset = { ...paramPreset, ...hintOverlay };
                 }
+                // Track peerForward so cursor tracking releases ANGLE_Y/BODY_ANGLE_Y
+                // and the lean stays stable (no jitter from mouse movement on those axes).
+                this._peerForwardActive = !!intent.actionHints.peerForward;
+            } else {
+                this._peerForwardActive = false;
             }
 
             if (Object.keys(paramPreset).length > 0) {
@@ -476,6 +481,14 @@ export class AvatarController {
         // shy / hesitant → gentle head tilt (gaze handled by GazeAnimator)
         if (hints.shy || hints.hesitant) {
             if (caps.hasAngleZ) overlay[PARAM_IDS.ANGLE_Z] = -6;
+        }
+
+        // peerForward → head pitches down + body leans forward (toward screen)
+        // Strong values so the "fissshhh in your face" feel reads through cursor noise.
+        if (hints.peerForward) {
+            if (caps.hasHeadAngle)  overlay[PARAM_IDS.ANGLE_Y] = -24;
+            if (caps.hasBodyAngleY) overlay[PARAM_IDS.BODY_ANGLE_Y] = -10;
+            if (caps.hasEyeBallXY)  overlay[PARAM_IDS.EYE_BALL_Y] = -0.6;
         }
 
         // flustered / embarrassed → max blush, elf ear droop, sweat drops, skirt puff
@@ -776,7 +789,16 @@ export class AvatarController {
      */
     setCursorInfluence(influence) {
         if (!this.isEnabled) return;
-        this.cursorInfluence = influence || {};
+        let inf = influence || {};
+        // Lock the lean axes during peerForward — cursor would otherwise wobble
+        // ANGLE_Y / BODY_ANGLE_Y / EYE_BALL_Y around the locked emotion target.
+        if (this._peerForwardActive) {
+            inf = { ...inf };
+            delete inf[PARAM_IDS.ANGLE_Y];
+            delete inf[PARAM_IDS.BODY_ANGLE_Y];
+            delete inf[PARAM_IDS.EYE_BALL_Y];
+        }
+        this.cursorInfluence = inf;
     }
 
 

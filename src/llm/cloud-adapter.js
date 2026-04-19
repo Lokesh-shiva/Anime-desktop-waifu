@@ -11,18 +11,18 @@ import { getCloudApiKey, getGeminiModel } from '../settings.js';
  * Gemma models don't support systemInstruction — the system prompt is
  * prepended to the user turn as a plain text block instead.
  */
-function buildRequestBody(systemPrompt, userText, extraConfig = {}) {
+function buildRequestBody(systemPrompt, userText, extraConfig = {}, jsonMode = false) {
     const model = getGeminiModel();
-    // Gemma 3 rejects the systemInstruction field — bake system prompt into user turn.
-    // Gemma 4+ and all Gemini models support it properly, so use it for better adherence.
     const isGemma3 = /^gemma-3/i.test(model);
     const generationConfig = {
         maxOutputTokens: DEFAULT_CONFIG.maxTokens,
         temperature: DEFAULT_CONFIG.temperature,
-        // stopSequences removed — 'User:' / 'Assistant:' are local-model artifacts
-        // that can prematurely cut cloud responses
         ...extraConfig
     };
+    // JSON mode: Gemini returns pure JSON, no reasoning prose
+    if (jsonMode && !isGemma3) {
+        generationConfig.responseMimeType = 'application/json';
+    }
 
     if (isGemma3) {
         // Gemma 3 only: no systemInstruction field — prepend system prompt to user turn
@@ -85,7 +85,7 @@ const CloudAdapter = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 signal: controller.signal,
-                body: JSON.stringify(buildRequestBody(systemPrompt, prompt))
+                body: JSON.stringify(buildRequestBody(systemPrompt, prompt, {}, !!options.jsonMode))
             });
 
             clearTimeout(timeoutId);
@@ -101,7 +101,15 @@ const CloudAdapter = {
             const data = await response.json();
             console.log('[Cloud] Response data:', JSON.stringify(data).slice(0, 200));
 
-            let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            // Thinking models return multiple parts: { thought: true, text: "..." } first,
+            // then the real answer. Pick the last non-thought part with actual text.
+            const parts = data?.candidates?.[0]?.content?.parts || [];
+            let text = '';
+            for (let i = parts.length - 1; i >= 0; i--) {
+                if (parts[i]?.thought) continue;
+                if (parts[i]?.text) { text = parts[i].text; break; }
+            }
+            if (!text) text = parts[0]?.text || '';
 
             // Post-processing hardening
             text = text.trim();

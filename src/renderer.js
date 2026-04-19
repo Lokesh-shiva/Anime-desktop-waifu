@@ -512,9 +512,13 @@ async function handleSubmit() {
  * Called by ProactiveIdle timer; bypasses user input flow entirely.
  * @param {{timeOfDay: string, minutesSilent: number, messageCount: number}} ctx
  */
-async function handleIdleMessage({ timeOfDay, timeContext, minutesSilent, messageCount }) {
+async function handleIdleMessage({ timeOfDay, timeContext, minutesSilent, messageCount, force }) {
+    console.log(`[Idle] handleIdleMessage fired — state=${StateMachine.getState()} minutesSilent=${minutesSilent}`);
     // Only fire when truly idle — reject if a response is already in flight
-    if (StateMachine.getState() !== STATES.IDLE) return;
+    if (StateMachine.getState() !== STATES.IDLE) {
+        console.log('[Idle] Skipped — not in IDLE state');
+        return;
+    }
 
     const tc = timeContext || getRichTimeContext();
 
@@ -537,7 +541,9 @@ async function handleIdleMessage({ timeOfDay, timeContext, minutesSilent, messag
     if (visionReaction) extraCtx.push(`Vision context: ${visionReaction}`);
 
     // Decide attention-seeking mode BEFORE building the prompt so it can shape it
-    const doAttentionAnim = minutesSilent >= 4 && Math.random() < 0.40;
+    const roll = Math.random();
+    const doAttentionAnim = force || (minutesSilent >= 3 && roll < 0.40);
+    console.log(`[Idle] Attention roll: ${roll.toFixed(2)} force=${!!force} → ${doAttentionAnim ? 'CREEP ANIM' : 'normal message'}`);
 
     // Internal trigger prompt — never shown in the chat bubble
     const idlePrompt = [
@@ -551,23 +557,26 @@ async function handleIdleMessage({ timeOfDay, timeContext, minutesSilent, messag
                 : `You're breaking the silence — not because you were asked to, but because the quiet got to you. Say something short and natural — a passing thought, noticing the time, or just something that drifted through your mind. Don't greet them like it's the start of a conversation.`,
     ].filter(Boolean).join(' ');
     if (doAttentionAnim) {
-        // Phase 1: lean in, curious stare
-        AvatarBridge.sendComplexIntent({ emotion: { label: 'curious', intensity: 0.80 } });
+        // Phase 1: creep toward screen + curious stare
+        AvatarBridge.sendComplexIntent({ creepIn: true });
+        AvatarBridge.sendComplexIntent({ emotion: { label: 'curious', intensity: 0.80 }, actionHints: { peerForward: true } });
         await new Promise(r => setTimeout(r, 1800));
-        if (StateMachine.getState() !== STATES.IDLE) return;
-        // Phase 2: slight pout + head tilt (shy hint drives ANGLE_Z)
+        if (StateMachine.getState() !== STATES.IDLE) { AvatarBridge.sendComplexIntent({ creepOut: true }); return; }
+        // Phase 2: slight pout + head drop + lean maintained
         AvatarBridge.sendComplexIntent({
             emotion: { label: 'annoyed', intensity: 0.35 },
-            actionHints: { shy: true },
+            actionHints: { shy: true, peerForward: true },
         });
         await new Promise(r => setTimeout(r, 1400));
-        if (StateMachine.getState() !== STATES.IDLE) return;
+        if (StateMachine.getState() !== STATES.IDLE) { AvatarBridge.sendComplexIntent({ creepOut: true }); return; }
     }
 
     const accepted = StateMachine.transition(EVENTS.USER_INPUT, { isIdle: true });
-    if (!accepted) return;
+    console.log('[Idle] Transition accepted:', accepted);
+    if (!accepted) { if (doAttentionAnim) AvatarBridge.sendComplexIntent({ creepOut: true }); return; }
 
     try {
+        console.log('[Idle] Calling generateStreaming...');
         const memoryContext = memoryManager.getContext();
         const presenceHints = { timeOfDay: getTimeOfDayTone(), inputRhythm: null };
         const systemInstruction = buildSystemPrompt(
@@ -589,6 +598,8 @@ async function handleIdleMessage({ timeOfDay, timeContext, minutesSilent, messag
         clearEmotionArcTimers();
         console.error('[Renderer] Idle message error:', error);
         StateMachine.transition(EVENTS.LLM_ERROR, error);
+    } finally {
+        if (doAttentionAnim) AvatarBridge.sendComplexIntent({ creepOut: true });
     }
 }
 
@@ -1824,6 +1835,9 @@ WeatherContext.init().catch(() => {});
 
 // Startup greeting — delayed to let avatar model + memory finish loading
 setTimeout(() => handleStartupGreeting(), 3000);
+
+// Dev helper — type testAttention() in the DevTools console to force the lean-in sequence
+window.testAttention = () => handleIdleMessage({ minutesSilent: 5, messageCount: 99, timeOfDay: getTimeOfDayTone(), timeContext: getRichTimeContext(), force: true });
 
 // Listen for Capabilities
 if (window.electronAPI && window.electronAPI.onAvatarCapabilities) {

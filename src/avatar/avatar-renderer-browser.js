@@ -120,6 +120,13 @@ let zoomState = {
     zoomStep: 0.08
 };
 
+// Creep state — face-approach animation independent of user zoom
+let creepMul = 1.0;
+let creepTarget = 1.0;
+const CREEP_IN_TARGET  = 1.18; // strong nudge — combines with peerForward head-pitch for "fissshhh" feel
+const CREEP_OUT_TARGET = 1.0;
+const CREEP_SPEED      = 0.006; // lerp fraction per frame (~60fps → ~3-4s for full creep)
+
 // ============================================
 // Core Engine & Model Management
 // ============================================
@@ -307,42 +314,35 @@ async function getModelPath() {
 
 function fitModelToView(container) {
     if (!model || !app) return;
+    _applyModelTransform(container);
+    model.anchor.set(0.5, 1);
+}
 
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
+function _applyModelTransform(container) {
+    if (!model || !app) return;
 
-    // Use internal dimensions (unscaled) as the source of truth
-    const width = initialModelWidth || model.internalModel.width;
+    const cont = container || document.getElementById('avatar-container');
+    if (!cont) return;
+
+    const containerWidth  = cont.clientWidth;
+    const containerHeight = cont.clientHeight;
+    const width  = initialModelWidth  || model.internalModel.width;
     const height = initialModelHeight || model.internalModel.height;
 
-    // Calculate scale to fit container, then apply zoom multiplier
-    const baseScale = Math.min(
-        containerWidth / width,
-        containerHeight / height
-    ) * 0.9;
-    const finalScale = baseScale * zoomState.currentScale;
+    const baseScale  = Math.min(containerWidth / width, containerHeight / height) * 0.9;
+    const finalScale = baseScale * zoomState.currentScale * creepMul;
 
     model.scale.set(finalScale);
     model.x = containerWidth / 2;
 
-    // Face-centered zoom: at zoom=1.0, model bottom is at container bottom.
-    // As zoom increases, shift the model DOWN so the face (at ~25% from top
-    // of model) stays centered in the viewport.
-    if (zoomState.currentScale <= 1.0) {
+    const effectiveZoom = zoomState.currentScale * creepMul;
+    if (effectiveZoom <= 1.0) {
         model.y = containerHeight;
     } else {
-        // The face is roughly at 25% from the top of the model.
-        // At higher zoom, we want the face position to align with the 
-        // center of the container.
         const scaledHeight = height * finalScale;
-        const faceY = 0.25 * scaledHeight; // Face position from top of scaled model
-        // Model anchor is (0.5, 1), so model.y is the bottom edge position.
-        // The face in screen coords = model.y - scaledHeight + faceY
-        // We want this to equal containerHeight / 2
-        // model.y = containerHeight / 2 + scaledHeight - faceY
+        const faceY = 0.25 * scaledHeight;
         model.y = containerHeight / 2 + scaledHeight - faceY;
     }
-    model.anchor.set(0.5, 1);
 }
 
 function onCoreTick(delta) {
@@ -350,6 +350,12 @@ function onCoreTick(delta) {
 
     const dt = delta / 60;
     updateCursorTracking(dt);
+
+    // Creep animation — lerp toward target each frame
+    if (Math.abs(creepMul - creepTarget) > 0.001) {
+        creepMul += (creepTarget - creepMul) * Math.min(CREEP_SPEED * 60 * dt, 0.12);
+        _applyModelTransform();
+    }
 }
 
 // State handling
@@ -593,6 +599,11 @@ if (window.avatarAPI) {
             console.log('[AvatarWindow] avatarController.isEnabled:', avatarController?.isEnabled);
             console.log('[AvatarWindow] model exists:', !!model);
             console.log('[AvatarWindow] ==========================================');
+
+            // Creep controls — handled here, not forwarded to AvatarController
+            if (intent.creepIn)  { creepTarget = CREEP_IN_TARGET;  return; }
+            if (intent.creepOut) { creepTarget = CREEP_OUT_TARGET; return; }
+
             if (avatarController) {
                 avatarController.handleComplexIntent(intent);
             } else {

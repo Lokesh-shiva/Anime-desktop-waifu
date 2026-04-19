@@ -142,9 +142,10 @@ export function getInputRhythmHint(keyTimestamps) {
  *   Minimum gap        : 60s  (safety floor)
  */
 export const ProactiveIdle = {
-    _timer: null,
-    _callback: null,
+    _timer:        null,
+    _callback:     null,
     _messageCount: 0,
+    _fireAt:       0,   // absolute epoch ms when next fire is due
 
     FIRST_MS:      3  * 60 * 1000,  // 3 min
     SUBSEQUENT_MS: 12 * 60 * 1000,  // 12 min
@@ -152,52 +153,25 @@ export const ProactiveIdle = {
     JITTER_NEXT:   90 * 1000,        // ±90s
     MIN_MS:        60 * 1000,        // never sooner than 1 min
 
-    /**
-     * Set the callback and start the initial timer.
-     * @param {function({timeOfDay: string, minutesSilent: number, messageCount: number}): void} callback
-     */
     init(callback) {
         this._callback = callback;
         this._messageCount = 0;
-        this._paused = false;
         this._schedule();
     },
 
-    /**
-     * Reset (restart) the silence timer. Call after every user input or Miko response.
-     */
+    /** Reset after any interaction — restarts the full countdown. */
     reset() {
         this._clearTimer();
         this._schedule();
     },
 
-    /** Stop permanently (e.g. on app teardown). */
     stop() {
         this._clearTimer();
-        this._paused = false;
     },
 
-    /**
-     * Pause idle timer — user is active in another window.
-     * Timer is cleared; resumes from scratch when resume() is called.
-     */
-    pause() {
-        if (this._paused) return;
-        this._paused = true;
-        this._clearTimer();
-        console.log('[IdleTimer] Paused — window lost focus');
-    },
-
-    /**
-     * Resume idle timer after focus returns.
-     * Starts a fresh countdown (not from where it paused — user just came back).
-     */
-    resume() {
-        if (!this._paused) return;
-        this._paused = false;
-        this._schedule();
-        console.log('[IdleTimer] Resumed — window regained focus');
-    },
+    // Desktop companion fires regardless of window focus — pause/resume are no-ops
+    pause()  {},
+    resume() {},
 
     _clearTimer() {
         if (this._timer !== null) {
@@ -207,13 +181,12 @@ export const ProactiveIdle = {
     },
 
     _schedule() {
-        if (this._paused) return;
-        const base   = this._messageCount === 0 ? this.FIRST_MS       : this.SUBSEQUENT_MS;
-        const jitter = this._messageCount === 0 ? this.JITTER_FIRST   : this.JITTER_NEXT;
-        // Random offset in [-jitter, +jitter]
+        const base   = this._messageCount === 0 ? this.FIRST_MS      : this.SUBSEQUENT_MS;
+        const jitter = this._messageCount === 0 ? this.JITTER_FIRST  : this.JITTER_NEXT;
         const offset = (Math.random() * 2 - 1) * jitter;
         const delay  = Math.max(this.MIN_MS, base + offset);
 
+        this._fireAt = Date.now() + delay;
         console.log(`[IdleTimer] Next idle check in ${Math.round(delay / 1000)}s`);
         this._timer = setTimeout(() => this._fire(), delay);
     },
@@ -221,9 +194,9 @@ export const ProactiveIdle = {
     _fire() {
         this._timer = null;
         this._messageCount++;
-        const minutesSilent = this._messageCount === 1
-            ? Math.round(this.FIRST_MS / 60000)
-            : Math.round(this.SUBSEQUENT_MS / 60000);
+        // Compute real elapsed minutes since the deadline was set
+        const base = this._messageCount === 1 ? this.FIRST_MS : this.SUBSEQUENT_MS;
+        const minutesSilent = Math.round(base / 60000);
 
         if (this._callback) {
             this._callback({
@@ -233,7 +206,6 @@ export const ProactiveIdle = {
                 messageCount: this._messageCount
             });
         }
-        // Schedule the next idle message after this one
         this._schedule();
     }
 };
