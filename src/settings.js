@@ -17,7 +17,9 @@ const STORAGE_KEYS = {
     GROQ_STT_API_KEY: 'waifu_groq_stt_api_key',
     SCREEN_VISION_ENABLED: 'waifu_screen_vision_enabled',
     CAMERA_VISION_ENABLED: 'waifu_camera_vision_enabled',
-    GEMINI_MODEL: 'waifu_gemini_model'
+    GEMINI_MODEL: 'waifu_gemini_model',
+    OPENROUTER_MODEL: 'waifu_openrouter_model',
+    OLLAMA_MODEL: 'waifu_ollama_model'
 };
 
 // Model selection modes
@@ -256,18 +258,36 @@ export const GEMINI_MODELS = [
 ];
 
 export function getGeminiModel() {
-    const stored = localStorage.getItem(STORAGE_KEYS.GEMINI_MODEL);
-    return GEMINI_MODELS.find(m => m.id === stored) ? stored : 'gemini-2.5-flash';
+    return localStorage.getItem(STORAGE_KEYS.GEMINI_MODEL) || 'gemini-2.5-flash';
 }
 
 export function setGeminiModel(modelId) {
-    if (!GEMINI_MODELS.find(m => m.id === modelId)) {
-        console.error('[Settings] Invalid Gemini model:', modelId);
-        return;
-    }
+    if (!modelId) return;
     localStorage.setItem(STORAGE_KEYS.GEMINI_MODEL, modelId);
     notifyListeners({ type: 'geminiModel', value: modelId });
     console.log('[Settings] Gemini model changed to:', modelId);
+}
+
+export function getOpenRouterModel() {
+    return localStorage.getItem(STORAGE_KEYS.OPENROUTER_MODEL) || 'google/gemma-4-31b-it:free';
+}
+
+export function setOpenRouterModel(modelId) {
+    if (!modelId) return;
+    localStorage.setItem(STORAGE_KEYS.OPENROUTER_MODEL, modelId);
+    notifyListeners({ type: 'openrouterModel', value: modelId });
+    console.log('[Settings] OpenRouter model changed to:', modelId);
+}
+
+export function getOllamaModel() {
+    return localStorage.getItem(STORAGE_KEYS.OLLAMA_MODEL) || 'phi4-mini:3.8b';
+}
+
+export function setOllamaModel(modelId) {
+    if (!modelId) return;
+    localStorage.setItem(STORAGE_KEYS.OLLAMA_MODEL, modelId);
+    notifyListeners({ type: 'ollamaModel', value: modelId });
+    console.log('[Settings] Ollama model changed to:', modelId);
 }
 
 export function isScreenVisionEnabled() {

@@ -4,9 +4,9 @@
  */
 
 import { DEFAULT_CONFIG, registerProvider } from './llm-interface.js';
+import { getOllamaModel } from '../settings.js';
 
 const OLLAMA_ENDPOINT = 'http://localhost:11434/api/generate';
-const MODEL = 'phi4-mini:3.8b';
 
 /**
  * Ollama LLM Provider
@@ -36,7 +36,7 @@ const OllamaAdapter = {
                 headers: { 'Content-Type': 'application/json' },
                 signal: controller.signal,
                 body: JSON.stringify({
-                    model: MODEL,
+                    model: options.modelId || getOllamaModel(),
                     messages: messages,
                     stream: false,
                     options: {
@@ -92,7 +92,7 @@ const OllamaAdapter = {
                 headers: { 'Content-Type': 'application/json' },
                 signal: controller.signal,
                 body: JSON.stringify({
-                    model: MODEL,
+                    model: options.modelId || getOllamaModel(),
                     messages,
                     stream: true,
                     options: {

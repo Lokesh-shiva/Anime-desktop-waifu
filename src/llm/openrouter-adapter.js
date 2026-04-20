@@ -5,7 +5,7 @@
  */
 
 import { DEFAULT_CONFIG } from './llm-interface.js';
-import { getOpenRouterApiKey } from '../settings.js';
+import { getOpenRouterApiKey, getOpenRouterModel } from '../settings.js';
 
 const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -28,7 +28,7 @@ const OpenRouterAdapter = {
         }
 
         const systemPrompt = options.systemInstruction || DEFAULT_CONFIG.systemPrompt;
-        const modelId = options.modelId || 'google/gemma-4-31b-it:free';
+        const modelId = options.modelId || getOpenRouterModel();
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), DEFAULT_CONFIG.timeout);

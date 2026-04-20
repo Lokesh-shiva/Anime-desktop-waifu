@@ -9,6 +9,7 @@ import {
     setOpenRouterApiKey,
     setElevenLabsApiKey, setVoiceEnabled, setTTSEngine, TTS_ENGINE,
     setGroqSttApiKey,
+    setGeminiModel, setOpenRouterModel, setOllamaModel,
     hasCompletedSetup, setSetupCompleted
 } from './settings.js';
 
@@ -601,6 +602,13 @@ function buildOverlayHTML() {
             <div id="llm-ollama-hint" style="display:none;font-size:12px;color:rgba(160,220,180,0.7);margin-bottom:16px;line-height:1.5">
                 Make sure Ollama is running locally (<span style="opacity:0.8">ollama serve</span>) with at least one model pulled.
             </div>
+            <div class="wiz-field" style="margin-top:4px">
+                <label class="wiz-label">Model ID <span style="opacity:0.4;font-size:9px;letter-spacing:0">(leave blank for default)</span></label>
+                <input class="wiz-input" id="llm-model-input" type="text" placeholder="gemini-2.5-flash" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="wiz-key-hint" id="llm-model-hint" style="margin-bottom:4px">
+                e.g. <span style="color:rgba(180,200,255,0.7)">gemini-2.5-pro</span>, <span style="color:rgba(180,200,255,0.7)">gemma-3-27b-it</span>
+            </div>
             <div class="wiz-error" id="llm-error">Please enter your API key to continue.</div>
             <div class="wiz-actions">
                 <button class="wiz-btn-skip" data-action="back">← Back</button>
@@ -740,10 +748,15 @@ function selectProvider(overlay, provider) {
     const keyField   = overlay.querySelector('#llm-key-field');
     const ollamaHint = overlay.querySelector('#llm-ollama-hint');
 
+    const modelInput = overlay.querySelector('#llm-model-input');
+    const modelHint  = overlay.querySelector('#llm-model-hint');
+
     if (provider === 'ollama') {
         keyField.style.display   = 'none';
         hint.style.display       = 'none';
         ollamaHint.style.display = 'block';
+        if (modelInput) modelInput.placeholder = 'phi4-mini:3.8b';
+        if (modelHint)  modelHint.innerHTML = 'Run <span style="color:rgba(180,200,255,0.7)">ollama list</span> to see available models';
     } else {
         keyField.style.display   = '';
         hint.style.display       = '';
@@ -751,9 +764,13 @@ function selectProvider(overlay, provider) {
         if (provider === 'gemini') {
             label.textContent = 'Gemini API Key';
             hint.innerHTML = 'Get a free key at <span style="color:rgba(180,200,255,0.7)">aistudio.google.com</span>';
+            if (modelInput) modelInput.placeholder = 'gemini-2.5-flash';
+            if (modelHint)  modelHint.innerHTML = 'e.g. <span style="color:rgba(180,200,255,0.7)">gemini-2.5-pro</span>, <span style="color:rgba(180,200,255,0.7)">gemma-3-27b-it</span>';
         } else {
             label.textContent = 'OpenRouter API Key';
             hint.innerHTML = 'Get a key at <span style="color:rgba(180,200,255,0.7)">openrouter.ai/keys</span>';
+            if (modelInput) modelInput.placeholder = 'google/gemma-4-31b-it:free';
+            if (modelHint)  modelHint.innerHTML = 'Browse models at <span style="color:rgba(180,200,255,0.7)">openrouter.ai/models</span>';
         }
     }
 }
@@ -782,17 +799,23 @@ function handleNext(overlay) {
         overlay.querySelector('#llm-error')?.classList.remove('visible');
         state.llmKey = key;
 
-        // Save LLM key / mode
+        // Save model ID if provided
+        const modelId = overlay.querySelector('#llm-model-input')?.value.trim();
+
+        // Save LLM key / mode / model
         if (state.llmProvider === 'ollama') {
             setModelMode(MODEL_MODE.LOCAL_ONLY);
+            if (modelId) setOllamaModel(modelId);
         } else if (state.llmProvider === 'gemini') {
             setCloudProvider('gemini');
             setCloudApiKey(key);
             setModelMode(MODEL_MODE.CLOUD_PREFERRED);
+            if (modelId) setGeminiModel(modelId);
         } else {
             setCloudProvider('openrouter');
             setOpenRouterApiKey(key);
             setModelMode(MODEL_MODE.CLOUD_PREFERRED);
+            if (modelId) setOpenRouterModel(modelId);
         }
     }
 
