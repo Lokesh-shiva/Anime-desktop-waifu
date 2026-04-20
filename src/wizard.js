@@ -586,13 +586,20 @@ function buildOverlayHTML() {
                     <span class="tab-name">OpenRouter</span>
                     <span class="tab-hint">Any model</span>
                 </button>
+                <button class="wiz-provider-tab" data-provider="ollama">
+                    <span class="tab-name">Ollama</span>
+                    <span class="tab-hint">Local · no key</span>
+                </button>
             </div>
-            <div class="wiz-field">
+            <div id="llm-key-field" class="wiz-field">
                 <label class="wiz-label" id="llm-key-label">Gemini API Key</label>
                 <input class="wiz-input" id="llm-key-input" type="password" placeholder="Paste your API key here…" autocomplete="off" />
             </div>
             <div class="wiz-key-hint" id="llm-key-hint">
                 Get a free key at <span style="color:rgba(180,200,255,0.7)">aistudio.google.com</span>
+            </div>
+            <div id="llm-ollama-hint" style="display:none;font-size:12px;color:rgba(160,220,180,0.7);margin-bottom:16px;line-height:1.5">
+                Make sure Ollama is running locally (<span style="opacity:0.8">ollama serve</span>) with at least one model pulled.
             </div>
             <div class="wiz-error" id="llm-error">Please enter your API key to continue.</div>
             <div class="wiz-actions">
@@ -728,14 +735,26 @@ function selectProvider(overlay, provider) {
     overlay.querySelectorAll('.wiz-provider-tab').forEach(t => {
         t.classList.toggle('selected', t.dataset.provider === provider);
     });
-    const label = overlay.querySelector('#llm-key-label');
-    const hint  = overlay.querySelector('#llm-key-hint');
-    if (provider === 'gemini') {
-        label.textContent = 'Gemini API Key';
-        hint.innerHTML = 'Get a free key at <span style="color:rgba(180,200,255,0.7)">aistudio.google.com</span>';
+    const label      = overlay.querySelector('#llm-key-label');
+    const hint       = overlay.querySelector('#llm-key-hint');
+    const keyField   = overlay.querySelector('#llm-key-field');
+    const ollamaHint = overlay.querySelector('#llm-ollama-hint');
+
+    if (provider === 'ollama') {
+        keyField.style.display   = 'none';
+        hint.style.display       = 'none';
+        ollamaHint.style.display = 'block';
     } else {
-        label.textContent = 'OpenRouter API Key';
-        hint.innerHTML = 'Get a key at <span style="color:rgba(180,200,255,0.7)">openrouter.ai/keys</span>';
+        keyField.style.display   = '';
+        hint.style.display       = '';
+        ollamaHint.style.display = 'none';
+        if (provider === 'gemini') {
+            label.textContent = 'Gemini API Key';
+            hint.innerHTML = 'Get a free key at <span style="color:rgba(180,200,255,0.7)">aistudio.google.com</span>';
+        } else {
+            label.textContent = 'OpenRouter API Key';
+            hint.innerHTML = 'Get a key at <span style="color:rgba(180,200,255,0.7)">openrouter.ai/keys</span>';
+        }
     }
 }
 
@@ -753,18 +772,20 @@ function handleNext(overlay) {
     const step = state.step;
 
     if (step === 1) {
-        // Validate LLM key
         const keyInput = overlay.querySelector('#llm-key-input');
         const key = keyInput?.value.trim();
-        if (!key) {
+        // Ollama needs no key — skip validation
+        if (state.llmProvider !== 'ollama' && !key) {
             overlay.querySelector('#llm-error')?.classList.add('visible');
             return;
         }
         overlay.querySelector('#llm-error')?.classList.remove('visible');
         state.llmKey = key;
 
-        // Save LLM key
-        if (state.llmProvider === 'gemini') {
+        // Save LLM key / mode
+        if (state.llmProvider === 'ollama') {
+            setModelMode(MODEL_MODE.LOCAL_ONLY);
+        } else if (state.llmProvider === 'gemini') {
             setCloudProvider('gemini');
             setCloudApiKey(key);
             setModelMode(MODEL_MODE.CLOUD_PREFERRED);
@@ -821,7 +842,9 @@ function buildSummary(overlay) {
     const el = overlay.querySelector('#wiz-summary');
     if (!el) return;
 
-    const providerLabel = state.llmProvider === 'gemini' ? 'Gemini' : 'OpenRouter';
+    const providerLabel = state.llmProvider === 'gemini' ? 'Gemini'
+        : state.llmProvider === 'ollama' ? 'Ollama (local)'
+        : 'OpenRouter';
     const avatarLabel   = state.avatarName
         ? state.avatarName.charAt(0).toUpperCase() + state.avatarName.slice(1)
         : '—';
