@@ -340,6 +340,18 @@ ipcMain.on('quit-app', () => forceQuit());
 // Dev mode flag — lets the renderer hide debug UI in production builds
 ipcMain.handle('is-dev', () => isDev);
 
+// App version
+ipcMain.handle('get-app-version', () => app.getVersion());
+
+// Auto-launch (Windows login item)
+ipcMain.handle('get-auto-launch', () => {
+    return app.getLoginItemSettings().openAtLogin;
+});
+ipcMain.handle('set-auto-launch', (_, enabled) => {
+    app.setLoginItemSettings({ openAtLogin: enabled });
+    return enabled;
+});
+
 // ============================================
 // Memory Persistence Handlers
 // ============================================

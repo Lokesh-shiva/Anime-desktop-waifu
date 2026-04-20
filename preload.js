@@ -32,5 +32,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAvatarEdgeInfo: () => ipcRenderer.invoke('avatar-edge-info'),
 
     // Dev-mode flag — renderer uses this to gate debug UI
-    isDev: () => ipcRenderer.invoke('is-dev')
+    isDev: () => ipcRenderer.invoke('is-dev'),
+
+    // App version + auto-launch
+    getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+    getAutoLaunch: () => ipcRenderer.invoke('get-auto-launch'),
+    setAutoLaunch: (enabled) => ipcRenderer.invoke('set-auto-launch', enabled)
 });

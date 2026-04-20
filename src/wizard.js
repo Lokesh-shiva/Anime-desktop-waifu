@@ -498,13 +498,24 @@ let state = {
     groqKey: '',
     avatarPath: null,
     avatarName: null,
-    availableModels: []
+    availableModels: [],
+    active: false,
+    onFinishCallback: null
 };
+
+/** Returns true while the wizard overlay is visible — lets renderer suppress the normal startup greeting */
+export function isWizardActive() { return state.active; }
 
 // ─── Public entry point ───────────────────────────────────────────────────────
 
-export async function initWizard() {
+/**
+ * @param {Object} [opts]
+ * @param {Function} [opts.onFinish] - called after wizard closes; receives { avatarName }
+ */
+export async function initWizard({ onFinish } = {}) {
     if (hasCompletedSetup()) return;
+    state.onFinishCallback = onFinish || null;
+    state.active = true;
 
     // Inject styles
     const style = document.createElement('style');
@@ -833,10 +844,14 @@ function buildSummary(overlay) {
 
 function handleFinish(overlay) {
     setSetupCompleted();
+    state.active = false;
     overlay.style.transition = 'opacity 0.5s ease';
     overlay.style.opacity = '0';
     setTimeout(() => {
         overlay.style.display = 'none';
         overlay.innerHTML = '';
+        if (typeof state.onFinishCallback === 'function') {
+            state.onFinishCallback({ avatarName: state.avatarName });
+        }
     }, 500);
 }
