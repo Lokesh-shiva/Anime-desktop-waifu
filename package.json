@@ -1,16 +1,73 @@
 {
     "name": "waifu-assistant",
-    "version": "2.0.0",
-    "description": "Phase 2 Hybrid Desktop AI Assistant",
+    "version": "1.0.0",
+    "description": "Your AI desktop companion",
     "main": "main.js",
     "scripts": {
-        "start": "electron ."
+        "start": "electron .",
+        "start:dev": "electron . --dev",
+        "build": "electron-builder",
+        "build:dir": "electron-builder --dir"
     },
     "dependencies": {
-        "pixi.js": "^7.3.2",
-        "pixi-live2d-display": "^0.4.0"
+        "pixi-live2d-display": "^0.4.0",
+        "pixi.js": "^7.3.2"
     },
     "devDependencies": {
-        "electron": "^28.0.0"
+        "electron": "^28.0.0",
+        "electron-builder": "^24.13.3"
+    },
+    "build": {
+        "appId": "com.waifu.assistant",
+        "productName": "Waifu",
+        "copyright": "Copyright © 2025",
+        "directories": {
+            "output": "dist",
+            "buildResources": "build"
+        },
+        "files": [
+            "main.js",
+            "preload.js",
+            "avatar-preload.js",
+            "src/**/*",
+            "!src/**/*.map",
+            "!**/*.md"
+        ],
+        "extraResources": [
+            {
+                "from": "2D_Livemodel",
+                "to": "2D_Livemodel",
+                "filter": [
+                    "**/*",
+                    "!**/*.zip"
+                ]
+            },
+            {
+                "from": "tts",
+                "to": "tts"
+            }
+        ],
+        "asar": true,
+        "win": {
+            "target": [
+                {
+                    "target": "nsis",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
+            "icon": "build/icon.ico"
+        },
+        "nsis": {
+            "oneClick": true,
+            "perMachine": false,
+            "allowToChangeInstallationDirectory": false,
+            "deleteAppDataOnUninstall": false,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true,
+            "shortcutName": "Waifu"
+        },
+        "publish": null
     }
 }

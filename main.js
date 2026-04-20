@@ -14,8 +14,12 @@ const isDev = !app.isPackaged
     || process.argv.includes('--dev')
     || process.env.WAIFU_DEV === '1';
 
+// In packaged builds, large assets (models, tts) live in process.resourcesPath
+// (placed there via electron-builder extraResources). In dev, they're next to main.js.
+const resourcesBase = app.isPackaged ? process.resourcesPath : __dirname;
+
 // Default model path
-const DEFAULT_MODEL_PATH = path.join(__dirname, '2D_Livemodel', 'tuzi_mian', 'tuzi mian.model3.json');
+const DEFAULT_MODEL_PATH = path.join(resourcesBase, '2D_Livemodel', 'tuzi_mian', 'tuzi mian.model3.json');
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -61,8 +65,8 @@ function createWindow() {
 function createTray() {
     // Try several candidate icon paths
     const iconCandidates = [
-        path.join(__dirname, '2D_Livemodel', 'Elf', 'Elf', 'VT_Elf', 'icon.png'),
-        path.join(__dirname, 'assets', 'tray-icon.png'),
+        path.join(resourcesBase, '2D_Livemodel', 'Elf', 'Elf', 'VT_Elf', 'icon.png'),
+        path.join(resourcesBase, 'assets', 'tray-icon.png'),
     ];
 
     const iconPath = iconCandidates.find(p => fs.existsSync(p));
@@ -465,7 +469,7 @@ ipcMain.handle('get-model-expressions', async (event, modelPathStr) => {
  * List available models recursively
  */
 ipcMain.handle('get-available-models', async () => {
-    const modelsDir = path.join(__dirname, '2D_Livemodel');
+    const modelsDir = path.join(resourcesBase, '2D_Livemodel');
     const models = [];
 
     if (!fs.existsSync(modelsDir)) return models;
@@ -595,7 +599,7 @@ const TTS_RETRY_DELAY_MS = 3000;
 function startTTSServer() {
     console.log('[Main] Starting TTS server...');
     const pythonCmd = 'python'; // Assume 'python' is in PATH and is 3.9+
-    const scriptPath = path.join(__dirname, 'tts', 'tts_server.py');
+    const scriptPath = path.join(resourcesBase, 'tts', 'tts_server.py');
 
     // Check if script exists
     if (!fs.existsSync(scriptPath)) {
