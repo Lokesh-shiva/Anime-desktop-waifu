@@ -161,171 +161,107 @@ You decide how the companion behaves.
 
 ---
 
-## 🚀 Installation (For Everyone)
+## 🚀 Installation
 
-Don't worry if you're not technical — follow these steps carefully and you'll be fine.
+### The Easy Way — Installer (Recommended)
 
-### Step 1: Install Node.js
+1. Go to the [**Releases page**](https://github.com/Lokesh-shiva/Anime-desktop-waifu/releases)
+2. Download **`Waifu Setup x.x.x.exe`**
+3. Run it — no admin rights needed, installs in seconds
+4. Launch from the desktop shortcut
 
-1. Go to [nodejs.org](https://nodejs.org/)
-2. Download the **LTS** version (the one that says "Recommended")
-3. Run the installer and click "Next" through everything
-4. Restart your computer after installation
+That's it. No Node.js, no Python setup, no terminal. 🎉
 
-### Step 2: Install Python (Required for Voice)
+### First Launch
 
-> **Note**: If you don't want voice features, you can skip this step. The app will work without voice.
+A setup wizard will guide you through:
+1. **AI provider** — pick Gemini (free API key), OpenRouter, or Ollama (local/offline)
+2. **Voice** — optional ElevenLabs TTS + Groq speech-to-talk keys
+3. **Your companion** — choose between **Elf** or **Alexia** (both recommended!)
 
-1. Go to [python.org/downloads](https://www.python.org/downloads/)
-2. Download Python 3.10 or newer
-3. **Important**: During installation, check the box that says **"Add Python to PATH"**
-4. Complete the installation
+Everything can be changed later from the Settings panel.
 
-### Step 3: Download This Project
+### Optional: Voice Setup
 
-**Option A: Download as ZIP**
-1. Click the green "Code" button on this page
-2. Click "Download ZIP"
-3. Extract the ZIP to a folder you'll remember (like `Documents\AnimeWaifu`)
+Voice is not required but makes the experience much better.
 
-**Option B: Use Git** (if you have it installed)
-```bash
-git clone https://github.com/Lokesh-shiva/Anime-desktop-waifu.git
-cd Anime-desktop-waifu
-```
+**ElevenLabs (Text-to-Speech)**:
+1. Create a free account at [elevenlabs.io](https://elevenlabs.io)
+2. Copy your API key → paste it in the wizard or Settings → Voice
 
-### Step 4: Install Dependencies
+**Groq (Push-to-Talk / Speech Input)**:
+1. Get a free key at [console.groq.com](https://console.groq.com)
+2. Paste it in the wizard or Settings → Voice
+3. Hold **Space** or the 🎤 button to speak
 
-1. Open the folder where you extracted/cloned the project
-2. Hold `Shift` and right-click in the folder
-3. Click "Open PowerShell window here" (or "Open in Terminal")
-4. Run these commands:
+**Python is required for system TTS fallback** (if you don't use ElevenLabs):
+1. Install [Python 3.10+](https://www.python.org/downloads/) — check "Add to PATH"
+2. Run: `pip install -r tts/requirements.txt`
 
-```bash
-# Install Node.js dependencies
-npm install
+### Optional: Local AI with Ollama
 
-# Install Python dependencies for voice (optional but recommended)
-pip install -r tts/requirements.txt
-```
+For fully offline, private conversations:
+1. Install [Ollama](https://ollama.ai/)
+2. Pull a model: `ollama pull phi4-mini:3.8b`
+3. Select **Ollama** in the wizard or Settings → AI
 
-### Step 5: Start the App
-
-In the same terminal window, type:
-
-```bash
-npm start
-```
-
-The app should open! 🎉
-
-### First Run Notes
-
-- The first launch may take a few extra seconds
-- Internet is only needed if you want to use cloud AI features
-- The avatar may take a moment to load
-- If something looks wrong, try closing and reopening the app
-- **Voice not working?** Make sure Python is installed and you ran `pip install -r tts/requirements.txt`
-
-### Configuring the AI Brain
-
-The app needs an AI to generate responses. You have three options:
-
-#### Option A: Local Only (Ollama) — Fully Offline
-
-1. Download and install [Ollama](https://ollama.ai/)
-2. Open a terminal and run:
-   ```bash
-   ollama pull phi4-mini:3.8b
-   ```
-3. Ollama runs in the background automatically
-4. In the app, select **"Local Only"** in the settings
-
-> ✅ No internet required after setup. Your conversations stay on your machine.
-
-#### Option B: Cloud Only (Gemini API) — Requires Internet
-
-1. Go to [Google AI Studio](https://aistudio.google.com/apikey)
-2. Create a free API key
-3. Open the app and go to Settings (⚙️ icon)
-4. Paste your API key in the **API Key** field
-5. Select **"Cloud Only"** in the settings
-
-> ⚠️ Requires internet. Conversations are sent to Google's servers.
-
-#### Option C: Cloud with Fallback (Recommended for Most Users)
-
-1. Set up Gemini API key (see Option B)
-2. Optionally install Ollama (see Option A)
-3. Select **"Cloud (fallback)"** in the settings
-
-> This uses cloud when available, falls back to local if offline or if cloud fails.
+> ✅ No internet required. Conversations never leave your machine.
 
 ---
 
-## 🛠️ Installation (For Developers)
+## 🛠️ For Developers
 
 ### Requirements
 
-- **Node.js**: v18.0.0 or higher recommended
-- **npm**: Comes with Node.js
-- **Electron**: v28.x (installed automatically via npm)
-- **Python**: 3.10+ (required for voice features)
-- **OS**: Windows 10/11 (primary support), other platforms untested
+- **Node.js**: v18+ 
+- **Python**: 3.10+ (for voice TTS server)
+- **OS**: Windows 10/11
 
-### Voice Dependencies (Python)
+### Setup
 
 ```bash
-# System TTS (required for voice)
-pip install -r tts/requirements.txt
+git clone https://github.com/Lokesh-shiva/Anime-desktop-waifu.git
+cd Anime-desktop-waifu
+npm install
+pip install -r tts/requirements.txt   # optional, for system TTS fallback
+npm start                              # launches with DevTools open
 ```
 
-This installs: `fastapi`, `uvicorn`, `pyttsx3`, `soundfile`, `numpy`
+Use `npm run start:dev` to explicitly force dev mode (DevTools + Debug tab).
 
-For **Neural TTS (Experimental)**:
+### Building the Installer
+
 ```bash
-pip install styletts2
+npm run build
+# outputs dist/Waifu Setup x.x.x.exe
 ```
-> ⚠️ StyleTTS2 requires additional setup and a GPU is recommended. See [StyleTTS2 docs](https://github.com/yl4579/StyleTTS2) for details.
 
-### Optional: Local LLM with Ollama
-
-For fully offline AI:
-
-1. Install [Ollama](https://ollama.ai/)
-2. Pull a model: `ollama pull phi4-mini:3.8b`
-3. Ollama runs in the background automatically
-
-If Ollama isn't running, the app will fall back to cloud mode (if configured).
+Releases are also built automatically via GitHub Actions when you push a version tag:
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
 
 ### Project Structure
 
 ```
 Anime-desktop-waifu/
 ├── main.js              # Electron main process
-├── preload.js           # Preload scripts for IPC
+├── preload.js           # Context bridge (IPC)
 ├── src/
 │   ├── index.html       # Main window
-│   ├── renderer.js      # UI logic
-│   ├── styles.css       # Styling
-│   ├── avatar/          # Live2D integration
-│   ├── llm/             # AI provider routing
-│   ├── memory/          # Fact storage and recall
-│   ├── presence/        # Awareness features
-│   ├── state-machine.js # Conversation state
-│   ├── settings.js      # User preferences
-│   └── voice/           # TTS integration
-├── 2D_Livemodel/        # Live2D model assets
-└── tts/                 # TTS server scripts
+│   ├── renderer.js      # UI logic + avatar bridge
+│   ├── wizard.js        # First-launch setup wizard
+│   ├── settings.js      # localStorage-backed settings
+│   ├── avatar/          # Live2D controller + capability registry
+│   ├── llm/             # AI adapters (Gemini, OpenRouter, Ollama)
+│   ├── memory/          # Fact storage, prompt building, diary
+│   ├── presence/        # Time-of-day, idle gestures, typing reactions
+│   ├── state-machine.js # IDLE / THINKING / RESPONDING states
+│   └── voice/           # TTS + STT adapters
+├── 2D_Livemodel/        # Live2D model assets (Elf, Alexia, …)
+├── tts/                 # Python TTS server
+└── .github/workflows/   # CI — auto-builds release .exe on tag push
 ```
-
-### Running in Development
-
-```bash
-npm start
-```
-
-Electron will open with DevTools available (`Ctrl+Shift+I`).
 
 ---
 
@@ -438,11 +374,12 @@ We don't pretend system TTS sounds good. We don't claim the AI is sentient. We b
 | Anime-style Neural TTS | ✅ Done | ElevenLabs neural TTS with emotion-driven delivery |
 | Push-to-Talk Input | ✅ Done | Groq Whisper STT — hold Space or mic button to speak |
 | Dynamic Emotion Arcs | ✅ Done | Avatar expresses 2–3 emotion beats per response with timed transitions |
-| VT_ELF Special Effects | ✅ Done | Elf ears, sweat drops, sparkle, anger marks, skirt puff |
-| Performance Optimizations | 📋 Planned | Lower CPU/memory usage |
+| Elf + Alexia model support | ✅ Done | Full overlay params, night pajamas, sleep cap, ear droop |
+| Idle gestures & presence | ✅ Done | Peek, stretch, look-around, sleepy — time-of-day weighted |
+| First-launch setup wizard | ✅ Done | Guided API key + avatar setup on first run |
+| Windows installer | ✅ Done | One-click .exe via electron-builder + GitHub Actions |
 | Cross-platform Support | 🤔 Considering | macOS and Linux builds |
 | Animated Backgrounds | 📋 Planned | Parallax scenes that match the current mood |
-| Memory UI | 📋 Planned | View and edit what your companion remembers |
 
 Want to help with any of these? Contributions welcome!
 
@@ -516,6 +453,7 @@ Please respect the creators' terms. If you want to support them or purchase the 
 
 - [Ollama](https://ollama.ai/) — Local AI models
 - [Google Gemini](https://ai.google.dev/) — Cloud AI (optional)
+- [OpenRouter](https://openrouter.ai/) — Cloud AI, any model (optional)
 
 ---
 
