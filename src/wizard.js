@@ -555,6 +555,7 @@ function buildOverlayHTML() {
 
     return `
     <div class="wiz-card">
+        <button data-action="dev-close" title="Close (dev only)" style="position:absolute;top:14px;right:16px;background:none;border:none;color:rgba(255,255,255,0.2);font-size:18px;cursor:pointer;line-height:1;padding:4px 6px;border-radius:6px;transition:color 0.2s" onmouseover="this.style.color='rgba(255,255,255,0.5)'" onmouseout="this.style.color='rgba(255,255,255,0.2)'">✕</button>
         <div class="wiz-dots">
             <div class="wiz-dot" data-dot="0"></div>
             <div class="wiz-dot" data-dot="1"></div>
@@ -727,6 +728,12 @@ function wireEvents(overlay) {
             case 'back':       showStep(overlay, state.step - 1); break;
             case 'save-voice': handleSaveVoice(overlay); break;
             case 'finish':     handleFinish(overlay); break;
+            case 'dev-close':
+                state.active = false;
+                overlay.style.transition = 'opacity 0.3s ease';
+                overlay.style.opacity = '0';
+                setTimeout(() => { overlay.style.display = 'none'; overlay.innerHTML = ''; }, 300);
+                break;
         }
     });
 
