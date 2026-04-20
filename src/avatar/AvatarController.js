@@ -79,6 +79,7 @@ export class AvatarController {
         this._moodBaseline = { label: null, intensity: 0 };
         // Night outfit (Alexia only): pajamas + sleep cap forced ON during calm hours.
         this._nightOutfitActive = false;
+        this._nightCapActive = false;
         this._baselineFadeTimer = null;
         this._BASELINE_FADE_MS = 20 * 60 * 1000; // 20 minutes
         this._BASELINE_EMA = 0.3;                 // weight of new beat vs existing baseline
@@ -290,9 +291,13 @@ export class AvatarController {
                     }
                     // Night outfit: force pajamas + cap on. Reset to 0 by day so the
                     // expression pipeline can't leak the pajama outfit into daytime.
-                    const outfitVal = controller._nightOutfitActive ? 1 : 0;
+                    // Param16/17 are Add-blend overlays on Alexia — matches the .exp3
+                    // expression files which use Value: 30 for full opacity.
+                    const outfitVal = controller._nightOutfitActive ? 30 : 0;
+                    // Param17 is inverted on this model — 0 = cap visible, 30 = cap hidden.
+                    const capVal = controller._nightCapActive ? 0 : 30;
                     try { coreModel.setParameterValueById('Param16', outfitVal); } catch (e) {}
-                    try { coreModel.setParameterValueById('Param17', outfitVal); } catch (e) {}
+                    try { coreModel.setParameterValueById('Param17', capVal); } catch (e) {}
                 }
 
                 // ANGLE params use addParameterValueById (delta on top of motion base).
@@ -408,6 +413,10 @@ export class AvatarController {
         if (typeof intent.nightOutfit === 'boolean') {
             this._nightOutfitActive = intent.nightOutfit;
             console.log(`[AvatarController] Night outfit ${intent.nightOutfit ? 'ON' : 'OFF'}`);
+        }
+        if (typeof intent.nightCap === 'boolean') {
+            this._nightCapActive = intent.nightCap;
+            console.log(`[AvatarController] Night cap ${intent.nightCap ? 'ON' : 'OFF'}`);
         }
 
         if (intent.emotion) {

@@ -29,5 +29,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     quitApp: () => ipcRenderer.send('quit-app'),
 
     // Avatar edge info — returns which side the window is closer to ('left' | 'right')
-    getAvatarEdgeInfo: () => ipcRenderer.invoke('avatar-edge-info')
+    getAvatarEdgeInfo: () => ipcRenderer.invoke('avatar-edge-info'),
+
+    // Dev-mode flag — renderer uses this to gate debug UI
+    isDev: () => ipcRenderer.invoke('is-dev')
 });

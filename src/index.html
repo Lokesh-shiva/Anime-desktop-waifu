@@ -5,12 +5,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; connect-src http://localhost:11434 https://generativelanguage.googleapis.com https://openrouter.ai https://api.elevenlabs.io https://api.groq.com http://127.0.0.1:19765; style-src 'self' 'unsafe-inline'; media-src 'self' data: blob:;">
+    content="default-src 'self'; connect-src http://localhost:11434 https://generativelanguage.googleapis.com https://openrouter.ai https://api.elevenlabs.io https://api.groq.com http://127.0.0.1:19765; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; media-src 'self' data: blob:;">
   <title>Waifu Assistant</title>
   <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Dev-only elements (tab buttons etc) hidden unless body has .dev-mode */
+    [data-dev-only] { display: none !important; }
+    body.dev-mode [data-dev-only] { display: inline-flex !important; }
+  </style>
 </head>
 
 <body>
+
+<!-- First-launch setup wizard — hidden until wizard.js shows it -->
+<div id="wizard-overlay" style="display:none"></div>
 
   <!-- ═══════════════════════════════════════════════
        CHAT VIEW
@@ -92,7 +100,7 @@
       <button class="tab-btn" data-tab="tab-voice">Voice</button>
       <button class="tab-btn" data-tab="tab-avatar">Avatar</button>
       <button class="tab-btn" data-tab="tab-memory">Memory</button>
-      <button class="tab-btn" data-tab="tab-debug">Debug</button>
+      <button class="tab-btn" data-tab="tab-debug" data-dev-only>Debug</button>
     </div>
 
     <!-- Tab body -->

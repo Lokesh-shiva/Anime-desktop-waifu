@@ -45,6 +45,7 @@ import {
     setGroqSttApiKey
 } from './settings.js';
 import { ELEVENLABS_VOICES, DEFAULT_VOICE_ID } from './voice/elevenlabs-adapter.js';
+import { initWizard } from './wizard.js';
 
 // Expose memoryManager globally for DevTools debugging
 window.memoryManager = memoryManager;
@@ -1863,6 +1864,17 @@ window.addEventListener('focus', () => ProactiveIdle.resume());
 // Weather — fetch once on startup, silently fails if no location permission
 WeatherContext.init().catch(() => {});
 
+// First-launch wizard — runs before anything else if setup not done
+initWizard();
+
+// Dev-mode gating — show Debug tab + test helpers only in dev builds
+(async () => {
+    try {
+        const dev = await window.electronAPI?.isDev?.();
+        if (dev) document.body.classList.add('dev-mode');
+    } catch (e) { /* production fallthrough — stays hidden */ }
+})();
+
 // Startup greeting — delayed to let avatar model + memory finish loading
 setTimeout(() => handleStartupGreeting(), 3000);
 
@@ -1870,10 +1882,28 @@ setTimeout(() => handleStartupGreeting(), 3000);
 // Re-checked every 10 min so transitions across the boundary don't need an app restart.
 function applyNightOutfitForTime() {
     const isCalm = getTimeOfDayTone() === 'calm';
-    AvatarBridge.sendComplexIntent({ nightOutfit: isCalm });
+    const hour = new Date().getHours();
+    // Cap only in the deep-night bedtime window (midnight–6am).
+    // Before midnight she's in pajamas but still cap-less (winding down).
+    const capOn = isCalm && hour >= 0 && hour < 6;
+    AvatarBridge.sendComplexIntent({ nightOutfit: isCalm, nightCap: capOn });
 }
-setTimeout(applyNightOutfitForTime, 4000);  // initial — after avatar finishes loading
+// Retry several times at startup so we don't miss the window where the
+// avatar/model is still loading, then settle into the long interval.
+[4000, 8000, 15000, 30000].forEach(ms => setTimeout(applyNightOutfitForTime, ms));
 setInterval(applyNightOutfitForTime, 10 * 60 * 1000);
+
+// Dev helper — force the night outfit on/off regardless of time.
+window.testWizard = () => {
+    localStorage.removeItem('waifu_setup_completed');
+    initWizard();
+    console.log('[test] Wizard reset — reload to see from scratch, or call initWizard() again.');
+};
+
+window.testNightOutfit = (on = true, cap = on) => {
+    AvatarBridge.sendComplexIntent({ nightOutfit: !!on, nightCap: !!cap });
+    console.log('[test] nightOutfit ->', !!on, 'cap ->', !!cap);
+};
 
 // Silent peek — Miko bends her body sideways like she's leaning around a corner.
 // Direction biased AWAY from the screen edge she's nearest to (so she bends into open space).

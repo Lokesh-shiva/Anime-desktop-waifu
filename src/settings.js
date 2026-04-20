@@ -306,6 +306,17 @@ function notifyListeners(change) {
     listeners.forEach(l => l(change));
 }
 
+// ─── First-launch setup completion ────────────────────────────────────────────
+const SETUP_COMPLETED_KEY = 'waifu_setup_completed';
+
+export function hasCompletedSetup() {
+    return localStorage.getItem(SETUP_COMPLETED_KEY) === 'true';
+}
+
+export function setSetupCompleted() {
+    localStorage.setItem(SETUP_COMPLETED_KEY, 'true');
+}
+
 // Export settings object for convenience
 export const Settings = {
     MODEL_MODE,

@@ -8,6 +8,12 @@ let avatarWindow = null;
 let tray = null;
 let isQuitting = false;
 
+// Dev mode: open devtools + expose debug UI. Auto-off in packaged builds.
+// Override with `npm start -- --dev` or by setting WAIFU_DEV=1.
+const isDev = !app.isPackaged
+    || process.argv.includes('--dev')
+    || process.env.WAIFU_DEV === '1';
+
 // Default model path
 const DEFAULT_MODEL_PATH = path.join(__dirname, '2D_Livemodel', 'tuzi_mian', 'tuzi mian.model3.json');
 
@@ -30,8 +36,8 @@ function createWindow() {
 
     mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 
-    // Open DevTools for debugging (remove in production)
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
+    // DevTools only in dev mode
+    if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
 
     // Hide to tray instead of quitting when user clicks X
     mainWindow.on('close', (e) => {
@@ -198,8 +204,8 @@ function createAvatarWindow() {
 
     avatarWindow.loadFile(path.join(__dirname, 'src', 'avatar', 'avatar-window.html'));
 
-    // Open DevTools for avatar window debugging
-    avatarWindow.webContents.openDevTools({ mode: 'detach' });
+    // DevTools only in dev mode
+    if (isDev) avatarWindow.webContents.openDevTools({ mode: 'detach' });
 
     // Persist window position and size whenever the user moves or resizes
     const _saveBounds = () => {
@@ -326,6 +332,9 @@ app.on('activate', () => {
 
 // Renderer requests a real quit (from the × button inside settings)
 ipcMain.on('quit-app', () => forceQuit());
+
+// Dev mode flag — lets the renderer hide debug UI in production builds
+ipcMain.handle('is-dev', () => isDev);
 
 // ============================================
 // Memory Persistence Handlers
