@@ -898,13 +898,16 @@ function buildSummary(overlay) {
 function handleFinish(overlay) {
     setSetupCompleted();
     state.active = false;
-    overlay.style.transition = 'opacity 0.5s ease';
+
+    // Enable the avatar window so it shows immediately on reload
+    localStorage.setItem('avatar_enabled', 'true');
+
+    overlay.style.transition = 'opacity 0.6s ease';
     overlay.style.opacity = '0';
     setTimeout(() => {
-        overlay.style.display = 'none';
-        overlay.innerHTML = '';
-        if (typeof state.onFinishCallback === 'function') {
-            state.onFinishCallback({ avatarName: state.avatarName });
-        }
-    }, 500);
+        // Reload the app so all saved settings (LLM mode, keys, voice, model)
+        // are picked up cleanly by every subsystem. The startup greeting will
+        // detect isFirstMeeting() === true and show a warm welcome automatically.
+        location.reload();
+    }, 600);
 }

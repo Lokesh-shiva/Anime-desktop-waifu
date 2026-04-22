@@ -1,0 +1,20 @@
+{
+    "Type": "Live2D Expression",
+    "Parameters": [
+        {
+            "Id": "ParamBrowLY",
+            "Value": -0.5,
+            "Blend": "Add"
+        },
+        {
+            "Id": "Angervis",
+            "Value": 1.0,
+            "Blend": "Add"
+        },
+        {
+            "Id": "Param10",
+            "Value": 0.0,
+            "Blend": "Add"
+        }
+    ]
+}

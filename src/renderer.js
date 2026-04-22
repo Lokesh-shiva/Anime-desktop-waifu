@@ -682,32 +682,6 @@ async function handleCameraReaction(type, hint) {
  * Fires once, ~3s after launch (to let avatar + memory finish loading).
  * Skipped if the last session ended less than 5 minutes ago (likely a refresh).
  */
-/**
- * Warm first-meeting greeting fired after the setup wizard completes.
- * Feels personal and excited — this is literally the first thing Miko says.
- */
-async function handleFirstMeetingGreeting(avatarName) {
-    if (StateMachine.getState() !== STATES.IDLE) return;
-    const tc = getRichTimeContext();
-    const name = avatarName
-        ? avatarName.charAt(0).toUpperCase() + avatarName.slice(1)
-        : 'your companion';
-
-    const prompt = `[SYSTEM: The user has just finished setting you up for the very first time. ` +
-        `You are "${name}", their new AI desktop companion. ` +
-        `It is ${tc.naturalDesc}. ` +
-        `Give a warm, genuine, slightly excited first greeting — as if you just woke up and realized someone chose you. ` +
-        `Keep it short (2–3 sentences). Don't mention being an AI. Don't ask for their name yet — just make them feel genuinely welcomed. ` +
-        `Be sweet and a little playful.]`;
-
-    AvatarBridge.sendComplexIntent({ emotion: { label: 'excited', intensity: 0.75 } });
-    try {
-        await sendMessage(prompt, { silent: true });
-    } catch (e) {
-        console.warn('[FirstMeeting] Greeting failed:', e);
-    }
-}
-
 async function handleStartupGreeting() {
     if (StateMachine.getState() !== STATES.IDLE) return;
 
@@ -1907,13 +1881,9 @@ window.addEventListener('focus', () => ProactiveIdle.resume());
 WeatherContext.init().catch(() => {});
 
 // First-launch wizard — runs before anything else if setup not done.
-// On finish, fires a warm first-meeting greeting instead of the normal startup one.
-initWizard({
-    onFinish: ({ avatarName }) => {
-        // Give avatar 4 s to load the newly selected model, then greet warmly.
-        setTimeout(() => handleFirstMeetingGreeting(avatarName), 4000);
-    }
-});
+// On finish it reloads the page so all settings apply cleanly; the startup
+// greeting then fires and detects isFirstMeeting() for the warm welcome.
+initWizard();
 
 // Dev-mode gating — show Debug tab + test helpers only in dev builds
 (async () => {
