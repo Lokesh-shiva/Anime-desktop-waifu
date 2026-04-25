@@ -30,10 +30,62 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get version from package.json
+        id: pkg
+        shell: bash
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
       - name: Upload release artifact
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.exe
-          generate_release_notes: true
+          name: "Waifu v${{ steps.pkg.outputs.version }}"
+          body: |
+            ## 🌸 Waifu v${{ steps.pkg.outputs.version }}
+
+            ### ⬇️ Installation
+            Download **`Waifu Setup ${{ steps.pkg.outputs.version }}.exe`** below and run it. No Node.js or Python required.
+
+            ---
+
+            ### ✨ What's in this release
+
+            #### First-launch Setup Wizard
+            - Guided setup on first run — choose your AI provider, paste API keys, and pick your companion
+            - Supports **Gemini**, **OpenRouter**, and **Ollama** (local/offline)
+            - Optional **ElevenLabs** TTS and **Groq** STT keys
+            - Custom model ID field for each provider
+
+            #### Companions
+            - **Elf** — gentle & expressive, pointy ears that droop when sad
+            - **Alexia** — lively & detailed, switches into pajamas + sleep cap after 10pm
+
+            #### Avatar Behaviours
+            - Idle gestures: peek, stretch, look around, sleepy (time-of-day weighted)
+            - Reacts to your typing in real time
+            - Leans in when thinking, perks up when curious
+            - Night outfit: Alexia wears pajamas 10pm–6am, sleep cap midnight–6am
+
+            #### App Polish
+            - No DevTools or debug UI in release builds
+            - Auto-launch on Windows startup toggle (Settings → Memory → System)
+            - App version shown in settings
+            - Warm first-meeting greeting after wizard completes
+
+            ---
+
+            ### 🔑 Getting API Keys
+            | Service | Free? | Link |
+            |---------|-------|------|
+            | Gemini (AI) | ✅ Yes | [aistudio.google.com](https://aistudio.google.com/apikey) |
+            | OpenRouter (AI) | ✅ Free models available | [openrouter.ai/keys](https://openrouter.ai/keys) |
+            | Ollama (AI) | ✅ Fully local | [ollama.ai](https://ollama.ai) |
+            | ElevenLabs (Voice) | ✅ Free tier | [elevenlabs.io](https://elevenlabs.io) |
+            | Groq (Speech input) | ✅ Free tier | [console.groq.com](https://console.groq.com) |
+
+            ---
+
+            ### ⚠️ Windows SmartScreen
+            Windows may show a SmartScreen warning on first run — this is normal for unsigned apps. Click **"More info" → "Run anyway"** to proceed.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
