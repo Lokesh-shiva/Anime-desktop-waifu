@@ -1,0 +1,134 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index ad37349..7d7fac3 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -33,8 +33,10 @@ target_include_directories(miotts PRIVATE
+ target_link_libraries(miotts PRIVATE
+     llama
+     ggml
+-    m
+ )
++if(NOT WIN32)
++    target_link_libraries(miotts PRIVATE m)
++endif()
+ 
+ add_executable(miotts-stream-device
+     examples/stream-to-device.cpp
+@@ -56,8 +58,10 @@ target_include_directories(miotts-stream-device PRIVATE
+ target_link_libraries(miotts-stream-device PRIVATE
+     llama
+     ggml
+-    m
+ )
++if(NOT WIN32)
++    target_link_libraries(miotts-stream-device PRIVATE m)
++endif()
+ 
+ add_executable(miotts-stream-benchmark
+     examples/stream-benchmark.cpp
+@@ -78,8 +82,10 @@ target_include_directories(miotts-stream-benchmark PRIVATE
+ target_link_libraries(miotts-stream-benchmark PRIVATE
+     llama
+     ggml
+-    m
+ )
++if(NOT WIN32)
++    target_link_libraries(miotts-stream-benchmark PRIVATE m)
++endif()
+ 
+ add_executable(miotts-stream-compare
+     examples/stream-compare.cpp
+@@ -100,5 +106,7 @@ target_include_directories(miotts-stream-compare PRIVATE
+ target_link_libraries(miotts-stream-compare PRIVATE
+     llama
+     ggml
+-    m
+ )
++if(NOT WIN32)
++    target_link_libraries(miotts-stream-compare PRIVATE m)
++endif()
+diff --git a/src/istft.cpp b/src/istft.cpp
+index add3f47..c58bb8d 100644
+--- a/src/istft.cpp
++++ b/src/istft.cpp
+@@ -1,9 +1,14 @@
+ #include "istft.h"
+ 
++#define _USE_MATH_DEFINES
+ #include <algorithm>
+ #include <cmath>
+ #include <vector>
+ 
++#ifndef M_PI
++#define M_PI 3.14159265358979323846
++#endif
++
+ istft_cache::istft_cache(int n_fft, int win_length) {
+     n_fft_ = n_fft;
+     win_length_ = win_length;
+diff --git a/src/main.cpp b/src/main.cpp
+index e9befbc..46b48d6 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -12,7 +12,7 @@ struct miotts_params {
+     std::string output_path = "output.wav";
+     std::string text;
+ 
+-    float temperature = 0.8f;
++    float temperature = 0.5f;
+     int max_tokens = 700;
+     int n_threads = 4;
+     int n_gpu_layers = 0;
+@@ -31,7 +31,7 @@ static void print_usage(const char * prog) {
+             "  -v, --voice PATH       Voice embedding .emb.gguf path (required)\n"
+             "  -o, --output PATH      Output WAV file path (default: output.wav)\n"
+             "  -p, --prompt TEXT      Text to synthesize (required)\n"
+-            "  -t, --temp FLOAT       Sampling temperature (default: 0.8)\n"
++            "  -t, --temp FLOAT       Sampling temperature (default: 0.5)\n"
+             "  --max-tokens N         Max tokens to generate (default: 700)\n"
+             "  --threads N            Number of CPU threads (default: 4)\n"
+             "  -ngl N                 Number of GPU layers (default: 0)\n"
+diff --git a/src/test-to-speech.cpp b/src/test-to-speech.cpp
+index 4e3e9ed..d33ec9a 100644
+--- a/src/test-to-speech.cpp
++++ b/src/test-to-speech.cpp
+@@ -88,7 +88,7 @@ int TestToSpeech::sample_rate() const {
+ }
+ 
+ std::string TestToSpeech::build_prompt(const std::string & text) {
+-    return "<|startoftext|><|im_start|>user\n" + text + "<|im_end|>\n<|im_start|>assistant\n";
++    return "<|im_start|>user\n" + text + "<|im_end|>\n<|im_start|>assistant\n";
+ }
+ 
+ std::string TestToSpeech::run_llm(const std::string & text, const Options & options) {
+@@ -126,6 +126,8 @@ std::string TestToSpeech::run_llm(const std::string & text, const Options & opti
+ 
+     llama_sampler_chain_params chain_params = llama_sampler_chain_default_params();
+     llama_sampler * sampler = llama_sampler_chain_init(chain_params);
++    llama_sampler_chain_add(sampler, llama_sampler_init_top_k(50));
++    llama_sampler_chain_add(sampler, llama_sampler_init_penalties(64, 1.3f, 0.0f, 0.0f));
+     llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature));
+     llama_sampler_chain_add(sampler, llama_sampler_init_dist(42));
+ 
+@@ -461,6 +463,8 @@ bool TestToSpeech::synthesize_stream_profiled(const VoiceModel & voice,
+ 
+     llama_sampler_chain_params chain_params = llama_sampler_chain_default_params();
+     llama_sampler * sampler = llama_sampler_chain_init(chain_params);
++    llama_sampler_chain_add(sampler, llama_sampler_init_top_k(50));
++    llama_sampler_chain_add(sampler, llama_sampler_init_penalties(64, 1.3f, 0.0f, 0.0f));
+     llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature));
+     llama_sampler_chain_add(sampler, llama_sampler_init_dist(42));
+ 
+diff --git a/src/test-to-speech.h b/src/test-to-speech.h
+index be47ee2..fae28cb 100644
+--- a/src/test-to-speech.h
++++ b/src/test-to-speech.h
+@@ -42,7 +42,7 @@ public:
+         std::string codec_path;
+         int n_threads = 4;
+         int n_gpu_layers = 0;
+-        float temperature = 0.8f;
++        float temperature = 0.5f;
+         int max_tokens = 700;
+     };
+ 
