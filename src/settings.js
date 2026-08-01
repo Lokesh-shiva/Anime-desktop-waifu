@@ -7,6 +7,7 @@
 // Storage keys
 const STORAGE_KEYS = {
     MODEL_MODE: 'waifu_model_mode',
+
     CLOUD_API_KEY: 'waifu_cloud_api_key',
     CLOUD_PROVIDER: 'waifu_cloud_provider',
     OPENROUTER_API_KEY: 'waifu_openrouter_api_key',
@@ -19,7 +20,9 @@ const STORAGE_KEYS = {
     CAMERA_VISION_ENABLED: 'waifu_camera_vision_enabled',
     GEMINI_MODEL: 'waifu_gemini_model',
     OPENROUTER_MODEL: 'waifu_openrouter_model',
-    OLLAMA_MODEL: 'waifu_ollama_model'
+    OLLAMA_MODEL: 'waifu_ollama_model',
+    LOCAL_PROVIDER: 'waifu_local_provider',
+    LMSTUDIO_MODEL: 'waifu_lmstudio_model'
 };
 
 // Model selection modes
@@ -31,8 +34,8 @@ export const MODEL_MODE = Object.freeze({
 
 // TTS Engine types
 export const TTS_ENGINE = Object.freeze({
-    SYSTEM: 'system',           // pyttsx3 (CPU)
-    STYLE_TTS: 'styletts2',     // StyleTTS2 (GPU/Heavy CPU)
+    MIOTTS:      'miotts',      // Local GPU neural TTS (default) — falls back to SAPI5 server-side if not built
+    SYSTEM:      'system',      // SAPI5 (Windows, no setup)
     ELEVEN_LABS: 'elevenlabs'   // ElevenLabs cloud API
 });
 
@@ -121,7 +124,7 @@ export function setVoiceEnabled(enabled) {
 export function getTTSEngine() {
     const stored = localStorage.getItem(STORAGE_KEYS.TTS_ENGINE);
     if (!stored || !Object.values(TTS_ENGINE).includes(stored)) {
-        return TTS_ENGINE.SYSTEM;
+        return TTS_ENGINE.MIOTTS;
     }
     return stored;
 }
@@ -290,6 +293,32 @@ export function setOllamaModel(modelId) {
     console.log('[Settings] Ollama model changed to:', modelId);
 }
 
+// Local provider: 'ollama' or 'lmstudio'
+export function getLocalProvider() {
+    return localStorage.getItem(STORAGE_KEYS.LOCAL_PROVIDER) || 'lmstudio';
+}
+
+export function setLocalProvider(provider) {
+    if (!['ollama', 'lmstudio'].includes(provider)) {
+        console.error('[Settings] Invalid local provider:', provider);
+        return;
+    }
+    localStorage.setItem(STORAGE_KEYS.LOCAL_PROVIDER, provider);
+    notifyListeners({ type: 'localProvider', value: provider });
+    console.log('[Settings] Local provider changed to:', provider);
+}
+
+export function getLMStudioModel() {
+    return localStorage.getItem(STORAGE_KEYS.LMSTUDIO_MODEL) || 'qwen2.5-7b-instruct';
+}
+
+export function setLMStudioModel(modelId) {
+    if (!modelId) return;
+    localStorage.setItem(STORAGE_KEYS.LMSTUDIO_MODEL, modelId);
+    notifyListeners({ type: 'lmstudioModel', value: modelId });
+    console.log('[Settings] LM Studio model changed to:', modelId);
+}
+
 export function isScreenVisionEnabled() {
     return localStorage.getItem(STORAGE_KEYS.SCREEN_VISION_ENABLED) === 'true';
 }
@@ -364,6 +393,10 @@ export const Settings = {
     setScreenVisionEnabled,
     isCameraVisionEnabled,
     setCameraVisionEnabled,
+    getLocalProvider,
+    setLocalProvider,
+    getLMStudioModel,
+    setLMStudioModel,
     subscribe
 };
 
