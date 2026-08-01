@@ -89,7 +89,7 @@ index e9befbc..46b48d6 100644
              "  --threads N            Number of CPU threads (default: 4)\n"
              "  -ngl N                 Number of GPU layers (default: 0)\n"
 diff --git a/src/test-to-speech.cpp b/src/test-to-speech.cpp
-index 4e3e9ed..d33ec9a 100644
+index 4e3e9ed..00f7861 100644
 --- a/src/test-to-speech.cpp
 +++ b/src/test-to-speech.cpp
 @@ -88,7 +88,7 @@ int TestToSpeech::sample_rate() const {
@@ -106,7 +106,7 @@ index 4e3e9ed..d33ec9a 100644
      llama_sampler_chain_params chain_params = llama_sampler_chain_default_params();
      llama_sampler * sampler = llama_sampler_chain_init(chain_params);
 +    llama_sampler_chain_add(sampler, llama_sampler_init_top_k(50));
-+    llama_sampler_chain_add(sampler, llama_sampler_init_penalties(64, 1.3f, 0.0f, 0.0f));
++    llama_sampler_chain_add(sampler, llama_sampler_init_penalties(64, 1.5f, 0.0f, 0.0f));
      llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature));
      llama_sampler_chain_add(sampler, llama_sampler_init_dist(42));
  
@@ -115,7 +115,7 @@ index 4e3e9ed..d33ec9a 100644
      llama_sampler_chain_params chain_params = llama_sampler_chain_default_params();
      llama_sampler * sampler = llama_sampler_chain_init(chain_params);
 +    llama_sampler_chain_add(sampler, llama_sampler_init_top_k(50));
-+    llama_sampler_chain_add(sampler, llama_sampler_init_penalties(64, 1.3f, 0.0f, 0.0f));
++    llama_sampler_chain_add(sampler, llama_sampler_init_penalties(64, 1.5f, 0.0f, 0.0f));
      llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature));
      llama_sampler_chain_add(sampler, llama_sampler_init_dist(42));
  

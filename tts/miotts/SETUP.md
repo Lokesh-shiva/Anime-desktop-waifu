@@ -46,7 +46,7 @@ What the patches do (see `local_patches.diff` for the full diff):
   running every generation to the hard `max_tokens` cap (700 codes ≈ 28s of
   audio, mostly silence/garbage past the real ~5s of speech).
 - **`src/test-to-speech.cpp`, sampler chain**: adds `top_k(50)` +
-  `penalties(64, 1.3, 0, 0)` (repetition penalty) before temperature sampling.
+  `penalties(64, 1.5, 0, 0)` (repetition penalty) before temperature sampling.
   Without it the model would dwell on similar codes and produce drawn-out,
   trembling vowels ("hellooo...voicceee") especially on energetic/exclamatory
   text.
@@ -54,7 +54,23 @@ What the patches do (see `local_patches.diff` for the full diff):
   `0.8` to `0.5`. At `0.8`, generation was audibly unstable (warped vowels on
   expressive text) and could occasionally still blow through the token cap
   even with the repetition penalty in place. `0.5` was stable across neutral,
-  happy, and sad test phrases.
+  happy, and sad English test phrases.
+
+**Known limitation — Japanese / mixed-script text:** even with the above
+fixes, this checkpoint (`MioTTS-0.6B-Q8_0.gguf`) is unstable on Japanese and
+mixed Japanese/English input — particularly stutter-repeated words next to
+punctuation (e.g. `い、いや!`). Symptoms range from drawn-out/trembling vowels
+to full breakdown (screaming/garbled noise) and failure to terminate
+generation (hits the 700-token cap). Tried and ruled out: raising the
+repetition penalty further (1.3→1.5, no meaningful improvement) and switching
+to the 1.2B model (worse, not better — full breakdown on the same test phrase).
+The practical fix applied instead: [llm-interface.js](../../src/llm/llm-interface.js)'s
+"Language" section was dialed back to use Japanese only rarely (at most one
+plain word every several responses, never repeated/stuttered, never adjacent
+to `!`) so this failure mode is triggered far less often. If revisiting this,
+the next thing to try would be a different codec/LLM pairing or checking
+whether the tokenizer handles Japanese BPE merges correctly for this specific
+GGUF export — this wasn't root-caused, only worked around.
 
 ## 3. Build (with CUDA/GPU offload)
 
