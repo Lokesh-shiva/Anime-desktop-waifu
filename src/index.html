@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; connect-src http://localhost:11434 https://generativelanguage.googleapis.com https://openrouter.ai https://api.elevenlabs.io https://api.groq.com http://127.0.0.1:19765; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; media-src 'self' data: blob:;">
+    content="default-src 'self'; connect-src http://localhost:11434 http://localhost:1234 https://generativelanguage.googleapis.com https://openrouter.ai https://api.elevenlabs.io https://api.groq.com http://127.0.0.1:19765; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; media-src 'self' data: blob:;">
   <title>Waifu Assistant</title>
   <link rel="stylesheet" href="styles.css">
   <style>
@@ -130,6 +130,29 @@
           </div>
         </div>
 
+        <!-- Local provider section — always visible -->
+        <div class="setting-section">
+          <div class="section-label">Local Provider</div>
+          <div class="radio-stack">
+            <label class="radio-option">
+              <input type="radio" name="local-provider" value="lmstudio">
+              <span class="radio-dot"></span>
+              <span>LM Studio <em>(recommended)</em></span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="local-provider" value="ollama">
+              <span class="radio-dot"></span>
+              <span>Ollama</span>
+            </label>
+          </div>
+          <div id="lmstudio-model-group" style="margin-top:10px;">
+            <label class="section-label" for="lmstudio-model-input">Model ID</label>
+            <input type="text" id="lmstudio-model-input" class="glass-input"
+              placeholder="e.g. qwen2.5-7b-instruct" autocomplete="off">
+            <p class="hint-text" style="margin-top:5px;">Must match the ID shown at localhost:1234/v1/models</p>
+          </div>
+        </div>
+
         <div id="cloud-provider-group" class="setting-section hidden">
           <div class="section-label">Cloud Provider</div>
           <div class="radio-stack">
@@ -181,19 +204,19 @@
           <div class="section-label">TTS Engine</div>
           <div class="radio-stack">
             <label class="radio-option">
-              <input type="radio" name="tts-engine" value="system" checked>
+              <input type="radio" name="tts-engine" value="miotts" checked>
               <span class="radio-dot"></span>
-              <span>System</span>
+              <span>MioTTS <em>(Local · GPU · Recommended)</em></span>
             </label>
             <label class="radio-option">
-              <input type="radio" name="tts-engine" value="styletts2">
+              <input type="radio" name="tts-engine" value="system">
               <span class="radio-dot"></span>
-              <span>Neural <em>(Experimental)</em></span>
+              <span>System <em>(Windows built-in)</em></span>
             </label>
             <label class="radio-option">
               <input type="radio" name="tts-engine" value="elevenlabs">
               <span class="radio-dot"></span>
-              <span>ElevenLabs</span>
+              <span>ElevenLabs <em>(Cloud · Expressive)</em></span>
             </label>
           </div>
         </div>
