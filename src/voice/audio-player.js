@@ -10,10 +10,11 @@ export class AudioPlayer {
         this.amplitudeCallback = null;
         this.onEndCallback = null;
         this.durationCallback = null;
+        this.playbackStartCallback = null;
         this.animationFrameId = null;
 
         // Playback rate: 1.0 = normal, 0.85 = ~15% slower, 0.75 = noticeably soft/intimate
-        this.playbackRate = 0.87;
+        this.playbackRate = 0.85;
 
         // For amplitude analysis
         this.audioContext = null;
@@ -95,6 +96,7 @@ export class AudioPlayer {
             this.isPlayingState = true;
             this._flatFrames = 0; // Reset flat-signal counter
             console.log('[AudioPlayer] Playback started');
+            if (this.playbackStartCallback) this.playbackStartCallback();
 
             // Start amplitude analysis loop
             this._analyze();
@@ -184,6 +186,15 @@ export class AudioPlayer {
      */
     onDuration(callback) {
         this.durationCallback = callback;
+    }
+
+    /**
+     * Set playback-start callback — fires the moment audio.play() resolves.
+     * Use this to sync animations/arcs to actual audio start, not synthesis start.
+     * @param {function(): void} callback
+     */
+    onPlaybackStart(callback) {
+        this.playbackStartCallback = callback;
     }
 
     /**
