@@ -7,11 +7,23 @@ import { DEFAULT_CONFIG } from './llm-interface.js';
 import { getCloudApiKey, getGeminiModel } from '../settings.js';
 
 /**
+ * Map memoryManager.recentMessages ({role:'user'|'assistant', content}) to
+ * Gemini's contents format ({role:'user'|'model', parts:[{text}]}).
+ * Gemini uses "model" for assistant turns, not "assistant".
+ */
+function mapHistoryToGeminiContents(history) {
+    return history.map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }]
+    }));
+}
+
+/**
  * Build the Gemini API request body.
  * Gemma models don't support systemInstruction — the system prompt is
  * prepended to the user turn as a plain text block instead.
  */
-function buildRequestBody(systemPrompt, userText, extraConfig = {}, jsonMode = false) {
+function buildRequestBody(systemPrompt, userText, history = [], extraConfig = {}, jsonMode = false) {
     const model = getGeminiModel();
     const isGemma3 = /^gemma-3/i.test(model);
     const generationConfig = {
@@ -24,19 +36,37 @@ function buildRequestBody(systemPrompt, userText, extraConfig = {}, jsonMode = f
         generationConfig.responseMimeType = 'application/json';
     }
 
+    const historyContents = mapHistoryToGeminiContents(history);
+
     if (isGemma3) {
-        // Gemma 3 only: no systemInstruction field — prepend system prompt to user turn
+        // Gemma 3 only: no systemInstruction field — prepend system prompt to the
+        // first turn instead (either the first history message, or the current
+        // user turn if there's no history yet).
+        if (historyContents.length > 0) {
+            const contents = historyContents.map((c, i) => {
+                if (i === 0 && c.role === 'user') {
+                    return { role: 'user', parts: [{ text: `${systemPrompt}\n\n${c.parts[0].text}` }] };
+                }
+                return c;
+            });
+            contents.push({ role: 'user', parts: [{ text: MODEL_HARDENING_PREFIX + userText }] });
+            return { contents, generationConfig };
+        }
         return {
             contents: [{
+                role: 'user',
                 parts: [{ text: `${systemPrompt}\n\n${MODEL_HARDENING_PREFIX}${userText}` }]
             }],
             generationConfig
         };
     }
 
-    // Gemini + Gemma 4+: proper system instruction field for better role adherence
+    // Gemini + Gemma 4+: proper system instruction field, full conversation history
     return {
-        contents: [{ parts: [{ text: MODEL_HARDENING_PREFIX + userText }] }],
+        contents: [
+            ...historyContents,
+            { role: 'user', parts: [{ text: MODEL_HARDENING_PREFIX + userText }] }
+        ],
         systemInstruction: { parts: [{ text: systemPrompt }] },
         generationConfig
     };
@@ -85,7 +115,13 @@ const CloudAdapter = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 signal: controller.signal,
-                body: JSON.stringify(buildRequestBody(systemPrompt, prompt, {}, !!options.jsonMode))
+                body: JSON.stringify(buildRequestBody(
+                    systemPrompt,
+                    prompt,
+                    Array.isArray(options.conversationHistory) ? options.conversationHistory : [],
+                    {},
+                    !!options.jsonMode
+                ))
             });
 
             clearTimeout(timeoutId);
@@ -153,7 +189,11 @@ const CloudAdapter = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 signal: controller.signal,
-                body: JSON.stringify(buildRequestBody(systemPrompt, prompt))
+                body: JSON.stringify(buildRequestBody(
+                    systemPrompt,
+                    prompt,
+                    Array.isArray(options.conversationHistory) ? options.conversationHistory : []
+                ))
             });
 
             clearTimeout(timeoutId);
