@@ -77,6 +77,17 @@ Rules:
 - Ignore greetings, filler, and small talk
 - Never invent facts
 - Never store emotions unless user explicitly states them
+- A fact must be your own third-person statement describing something about the
+  user. Never copy a line of dialogue verbatim as if it were a fact.
+
+Examples of what NOT to extract as facts (these are dialogue, not information):
+- User said "Hello there" -> NOT a fact, just a greeting
+- User said "no you're not" -> NOT a fact, just a reply/rebuttal
+- User said "thanks" or "yes" -> NOT a fact, just an acknowledgement
+
+Examples of what TO extract:
+- User says "my brother's name is Aditya" -> {"content":"User's brother is named Aditya","category":"identity","reinforces":null,"contradicts":null}
+- User mentions they work as a software engineer -> {"content":"User works as a software engineer","category":"identity","reinforces":null,"contradicts":null}
 
 Output the JSON object directly. Nothing before it. Nothing after it.`;
 
