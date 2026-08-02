@@ -56,7 +56,7 @@ MIOTTS_DIR    = Path(__file__).parent / "miotts"
 MIOTTS_BIN    = MIOTTS_DIR / "build" / "miotts.exe"
 MIOTTS_MODEL  = MIOTTS_DIR / "models" / "MioTTS-0.6B-Q8_0.gguf"
 MIOTTS_CODEC  = MIOTTS_DIR / "models" / "miocodec.gguf"
-MIOTTS_VOICE  = MIOTTS_DIR / "models" / "en_female.emb.gguf"
+MIOTTS_VOICE  = MIOTTS_DIR / "models" / "cartethyia.emb.gguf"
 
 
 class MioTTS:

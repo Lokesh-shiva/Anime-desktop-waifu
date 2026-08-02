@@ -170,4 +170,65 @@ and sampler chain ones). Play `test.wav` and confirm it's stable, natural
 speech, not drawn-out/trembling vowels.
 
 Once confirmed, `src/` can be deleted if you want to reclaim disk space —
-only `build/` and `models/` are needed at runtime.
+only `build/` and `models/` are needed at runtime. (Keep it around if you plan
+to redo voice cloning below — `src/tools/create_voice_emb.py` lives there.)
+
+## 7. Voice cloning (Miko's actual voice)
+
+`tts_server.py`'s `MIOTTS_VOICE` points at `models/cartethyia.emb.gguf` — a
+cloned voice, not one of the stock presets. This file is gitignored (lives
+under `models/`), so a fresh clone needs to regenerate it.
+
+**Why a separate venv:** the cloning tool (`Aratako/MioCodec` on PyPI/GitHub)
+requires Python ≥3.12, but `tts/.venv` is pinned to 3.11 for the TTS server
+itself. Don't touch that venv — set up a throwaway one just for cloning:
+
+```bash
+winget install --id Python.Python.3.12 -e --silent
+winget install --id Gyan.FFmpeg -e --silent   # needed for non-WAV sources (mp3, m4a, etc.)
+
+cd tts/miotts
+py -3.12 -m venv clone_venv
+clone_venv/Scripts/python -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+clone_venv/Scripts/python -m pip install gguf soundfile numpy "git+https://github.com/Aratako/MioCodec"
+```
+
+**Extract an embedding from a reference clip:**
+
+```bash
+clone_venv/Scripts/python src/tools/create_voice_emb.py "path/to/reference.wav" "models/<name>.emb.gguf" --name "<Label>"
+```
+
+Handles WAV/FLAC/OGG natively; anything else (mp3, m4a, webm) needs `ffmpeg` on
+PATH. First run downloads the ~1GB PyTorch `Aratako/MioCodec-25Hz-44.1kHz-v2`
+model to the HF cache (separate from the GGUF codec — this is the PyTorch
+version used only for embedding extraction, not runtime inference).
+
+**Reference clip guidance (learned by testing, not documented upstream):**
+- **Length: 5-25s, not longer.** This tool does a single global-embedding
+  extraction (one forward pass, no averaging across samples). A ~3-minute
+  clip produced a diluted, unstable-sounding embedding — bad clone quality
+  *and* triggered generation instability. A trimmed ~25s clip worked fine.
+  Shorter, cleaner clips are safer than long ones.
+- **No overlapping background noise/SFX** in the reference — it all gets
+  baked into the one embedding vector.
+- Voice character fit is a real limit, not just input quality: this 0.6B
+  model's zero-shot cloning may just not resemble an out-of-domain voice
+  (e.g. a stylized game-character performance) well no matter how clean the
+  clip is. If a clone doesn't sound right after a clean short clip, that's
+  more likely a model-capability ceiling than something to keep tuning.
+
+Once you have an `.emb.gguf`, point `MIOTTS_VOICE` in `tts/tts_server.py` at
+it and restart the app.
+
+**Cross-cutting finding — stutter/repetition text triggers instability
+regardless of voice:** the voice embedding only affects the *decode* step,
+not the LLM's speech-code generation, so any text-generation instability
+(drawn-out/trembling vowels, runaway token count) reproduces identically no
+matter which voice is selected. The specific trigger identified by testing:
+**stuttered or repeated words next to punctuation** — `"I... I don't know"`,
+the Japanese `"い、いや!"` — regardless of language or script. Rephrasing to
+remove the repeat (`"I don't know... this is really sad"`) fixed it every
+time tested (confirmed by code count dropping ~2x). If a line sounds
+stretched/trembling, check for this pattern first before assuming it's a
+voice-specific issue.
