@@ -29,6 +29,7 @@ const OpenRouterAdapter = {
 
         const systemPrompt = options.systemInstruction || DEFAULT_CONFIG.systemPrompt;
         const modelId = options.modelId || getOpenRouterModel();
+        const history = Array.isArray(options.conversationHistory) ? options.conversationHistory : [];
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), DEFAULT_CONFIG.timeout);
@@ -49,14 +50,9 @@ const OpenRouterAdapter = {
                 body: JSON.stringify({
                     model: modelId,
                     messages: [
-                        {
-                            role: 'system',
-                            content: systemPrompt
-                        },
-                        {
-                            role: 'user',
-                            content: prompt
-                        }
+                        { role: 'system', content: systemPrompt },
+                        ...history.map(m => ({ role: m.role, content: m.content })),
+                        { role: 'user',   content: prompt }
                     ],
                     temperature: DEFAULT_CONFIG.temperature,
                     max_tokens: DEFAULT_CONFIG.maxTokens,
