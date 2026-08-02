@@ -4,10 +4,18 @@
  * Handles model selection, availability checking, and fallback logic
  */
 
-import { getModelMode, MODEL_MODE, getCloudProvider } from '../settings.js';
+import { getModelMode, MODEL_MODE, getCloudProvider, getLocalProvider } from '../settings.js';
 import OllamaAdapter from './ollama-adapter.js';
+import LMStudioAdapter from './lmstudio-adapter.js';
 import CloudAdapter from './cloud-adapter.js';
 import OpenRouterAdapter from './openrouter-adapter.js';
+
+/**
+ * Get the local adapter based on settings (LM Studio or Ollama)
+ */
+function getLocalAdapter() {
+    return getLocalProvider() === 'lmstudio' ? LMStudioAdapter : OllamaAdapter;
+}
 
 /**
  * Get the appropriate cloud adapter based on settings
@@ -36,7 +44,7 @@ export const BrainRouter = {
         // If preferLocal requested AND we are not forced to Cloud Only
         // Use local directly
         if (options.preferLocal && mode !== MODEL_MODE.CLOUD_ONLY) {
-            console.log('[Brain] Preferring local for background task');
+            console.log(`[Brain] Preferring local (${getLocalProvider()}) for background task`);
             rawResponse = await this._generateLocal(prompt, options);
         } else {
             switch (mode) {
@@ -83,13 +91,13 @@ export const BrainRouter = {
         // Pick adapter using same logic as generate()
         let adapter;
         if (options.preferLocal && mode !== MODEL_MODE.CLOUD_ONLY) {
-            adapter = OllamaAdapter;
+            adapter = getLocalAdapter();
         } else {
             switch (mode) {
-                case MODEL_MODE.LOCAL_ONLY:     adapter = OllamaAdapter;       break;
+                case MODEL_MODE.LOCAL_ONLY:     adapter = getLocalAdapter();   break;
                 case MODEL_MODE.CLOUD_PREFERRED:
                 case MODEL_MODE.CLOUD_ONLY:     adapter = getCloudAdapter();   break;
-                default:                        adapter = OllamaAdapter;
+                default:                        adapter = getLocalAdapter();
             }
         }
 
@@ -146,16 +154,17 @@ export const BrainRouter = {
                 console.warn('[Brain] Streaming failed:', streamError.message);
 
                 // For CLOUD_PREFERRED, try local fallback
-                if (mode === MODEL_MODE.CLOUD_PREFERRED && adapter !== OllamaAdapter) {
+                if (mode === MODEL_MODE.CLOUD_PREFERRED && adapter !== getLocalAdapter()) {
                     console.log('[Brain] Falling back to local stream/generate');
+                    const localAdapter = getLocalAdapter();
                     try {
-                        if (typeof OllamaAdapter.stream === 'function') {
-                            let rawResponse = await OllamaAdapter.stream(prompt, options, onChunk);
+                        if (typeof localAdapter.stream === 'function') {
+                            let rawResponse = await localAdapter.stream(prompt, options, onChunk);
                             if (options.raw) return rawResponse;
                             rawResponse = rawResponse.replace(/^\[EMOTION:[^\]\n]+\]\n?/, '').trim();
                             return this._parseLLMResponse(rawResponse);
                         }
-                        const rawResponse = await OllamaAdapter.generate(prompt, options);
+                        const rawResponse = await localAdapter.generate(prompt, options);
                         if (options.raw) return rawResponse;
                         const parsed = this._parseLLMResponse(rawResponse);
                         if (!provisionalFired && onProvisionalEmotion && parsed.emotion) {
@@ -195,6 +204,12 @@ export const BrainRouter = {
 
         // Strip markdown code fences — Gemma 3 / less-compliant models wrap JSON in ```json ... ```
         rawText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+
+        // Normalize Unicode smart/curly quotes → straight ASCII quotes
+        // Qwen and some other models output “/” instead of " around JSON strings
+        rawText = rawText
+            .replace(/[“”„‟❝❞]/g, '"')  // curly double quotes → "
+            .replace(/[‘’‚‛❛❜]/g, "'"); // curly single quotes → '
 
         // Strategy 1: Pure JSON parse (cloud models usually return clean JSON)
         try {
@@ -331,8 +346,8 @@ export const BrainRouter = {
      */
     async _generateLocal(prompt, options) {
         try {
-            const response = await OllamaAdapter.generate(prompt, options);
-            console.log('[Brain] Local response received');
+            const response = await getLocalAdapter().generate(prompt, options);
+            console.log(`[Brain] Local (${getLocalProvider()}) response received`);
             return response;
         } catch (error) {
             console.error('[Brain] Local error:', error.message);
@@ -382,7 +397,7 @@ export const BrainRouter = {
 
         // Fallback to local
         try {
-            const response = await OllamaAdapter.generate(prompt, options);
+            const response = await getLocalAdapter().generate(prompt, options);
             console.log('[Brain] Local fallback response received');
             return response;
         } catch (error) {
@@ -401,7 +416,7 @@ export const BrainRouter = {
 
         switch (mode) {
             case MODEL_MODE.LOCAL_ONLY:
-                return OllamaAdapter.isAvailable();
+                return getLocalAdapter().isAvailable();
 
             case MODEL_MODE.CLOUD_ONLY:
                 return adapter.isAvailable();
@@ -410,12 +425,12 @@ export const BrainRouter = {
                 // Available if either works
                 const [cloud, local] = await Promise.all([
                     adapter.isAvailable(),
-                    OllamaAdapter.isAvailable()
+                    getLocalAdapter().isAvailable()
                 ]);
                 return cloud || local;
 
             default:
-                return OllamaAdapter.isAvailable();
+                return getLocalAdapter().isAvailable();
         }
     },
 
