@@ -22,7 +22,11 @@ import {
     setCameraVisionEnabled,
     getGeminiModel,
     setGeminiModel,
-    GEMINI_MODELS
+    GEMINI_MODELS,
+    getLocalProvider,
+    setLocalProvider,
+    getLMStudioModel,
+    setLMStudioModel
 } from './settings.js';
 import { ScreenWatcher } from './vision/ScreenWatcher.js';
 import { CameraWatcher } from './vision/CameraWatcher.js';
@@ -42,7 +46,7 @@ import {
     getElevenLabsVoiceId,
     setElevenLabsVoiceId,
     getGroqSttApiKey,
-    setGroqSttApiKey
+    setGroqSttApiKey,
 } from './settings.js';
 import { ELEVENLABS_VOICES, DEFAULT_VOICE_ID } from './voice/elevenlabs-adapter.js';
 import { initWizard, isWizardActive } from './wizard.js';
@@ -160,18 +164,23 @@ function playEmotionArc(arc, text, actionHints = {}) {
         return;
     }
 
-    // ElevenLabs runs ~170 wpm → ~350 ms/word (measured from real audio logs).
-    // Floor at 1500 ms so single-sentence replies still get a full transition.
-    const wordCount          = (text || '').split(/\s+/).filter(Boolean).length;
-    const estimatedDurationMs = Math.max(1500, wordCount * 350);
+    clearEmotionArcTimers();
 
-    console.log(`[Arc] Scheduling ${arc.length} beats over ~${estimatedDurationMs}ms estimate (${wordCount} words)`);
-    _scheduleArcBeats(arc, estimatedDurationMs, actionHints);
+    // Fire the at=0 beat immediately so the avatar reacts the moment text arrives.
+    const zeroBeat = arc.find(b => b.at <= 0.01);
+    if (zeroBeat) {
+        console.log(`[Arc] Immediate beat: ${zeroBeat.label} @ intensity=${zeroBeat.intensity}`);
+        AvatarBridge.sendComplexIntent({
+            emotion: { label: zeroBeat.label, intensity: zeroBeat.intensity, sentimentScore: 0 },
+            actionHints
+        });
+    }
 
-    // Store AFTER _scheduleArcBeats (which calls clearEmotionArcTimers internally)
-    // so _pendingArc is set when VoiceService.onDuration() fires.
-    _pendingArc      = arc;
+    // Store remaining beats (at > 0) — they'll be scheduled against real audio
+    // duration by onDuration / onAudioStart, not against a guess.
+    _pendingArc      = arc.filter(b => b.at > 0.01);
     _pendingArcHints = actionHints;
+    console.log(`[Arc] ${_pendingArc.length} beats queued for audio-sync`);
 }
 
 // ── Chat history ──────────────────────────────────────────────────────────────
@@ -256,6 +265,7 @@ const voiceSettingsGroup = document.getElementById('voice-settings-group');
 const elevenLabsGroup = document.getElementById('elevenlabs-settings-group');
 const elevenLabsKeyInput = document.getElementById('elevenlabs-key-input');
 const elevenLabsVoiceSelect = document.getElementById('elevenlabs-voice-select');
+
 const modelSelect = document.getElementById('model-select');
 const groqSttKeyInput = document.getElementById('groq-stt-key-input');
 
@@ -402,6 +412,8 @@ function escapeHtml(text) {
  * @returns {string} - decoded partial text, or '' if not yet parseable
  */
 function extractPartialText(rawJson) {
+    // Normalize smart/curly quotes so Qwen's output doesn't break matching
+    rawJson = rawJson.replace(/[""„‟❝❞]/g, '"').replace(/[''‚‛❛❜]/g, "'");
     // Match opening of "text": "..."
     const match = rawJson.match(/"text"\s*:\s*"([\s\S]*)/);
     if (!match) return '';
@@ -463,7 +475,7 @@ async function handleSubmit() {
         //    chat bubble fills progressively as tokens arrive)
         const responseObj = await BrainRouter.generateStreaming(
             query,
-            { systemInstruction },
+            { systemInstruction, conversationHistory: memoryManager.recentMessages },
             // onProvisionalEmotion — fires on first [EMOTION:…] tag (~0.3 s in)
             (provisionalEmotion) => {
                 console.log('[Renderer] Provisional emotion:', provisionalEmotion.label);
@@ -971,7 +983,7 @@ function initSettings() {
         groqSttKeyInput.value = getGroqSttApiKey() || '';
     }
 
-    // Show ElevenLabs subgroup only when engine = elevenlabs and voice is on
+    // Show engine-specific subgroups
     updateElevenLabsVisibility();
     updateCloudVisibility();
 
@@ -995,6 +1007,39 @@ function initSettings() {
         geminiModelSelect.addEventListener('change', (e) => {
             setGeminiModel(e.target.value);
             updateHint();
+        });
+    }
+
+    // Local provider selector (LM Studio / Ollama)
+    const localProviderRadios = document.querySelectorAll('input[name="local-provider"]');
+    const lmstudioModelInput  = document.getElementById('lmstudio-model-input');
+    const lmstudioModelGroup  = document.getElementById('lmstudio-model-group');
+
+    const currentLocalProvider = getLocalProvider();
+    localProviderRadios.forEach(r => { r.checked = r.value === currentLocalProvider; });
+    if (lmstudioModelInput) lmstudioModelInput.value = getLMStudioModel();
+
+    // Show/hide model input based on provider
+    function updateLocalProviderUI() {
+        const isLMStudio = getLocalProvider() === 'lmstudio';
+        if (lmstudioModelGroup) lmstudioModelGroup.style.display = isLMStudio ? '' : 'none';
+    }
+    updateLocalProviderUI();
+
+    localProviderRadios.forEach(r => {
+        r.addEventListener('change', (e) => {
+            setLocalProvider(e.target.value);
+            updateLocalProviderUI();
+        });
+    });
+
+    let lmstudioModelTimeout;
+    if (lmstudioModelInput) {
+        lmstudioModelInput.addEventListener('input', (e) => {
+            clearTimeout(lmstudioModelTimeout);
+            lmstudioModelTimeout = setTimeout(() => {
+                setLMStudioModel(e.target.value.trim());
+            }, 500);
         });
     }
 
@@ -1026,6 +1071,8 @@ function updateElevenLabsVisibility() {
     const show = isVoiceEnabled() && getTTSEngine() === TTS_ENGINE.ELEVEN_LABS;
     elevenLabsGroup.classList.toggle('hidden', !show);
 }
+
+
 
 /**
  * Show/hide cloud provider and API key fields based on mode
@@ -1483,6 +1530,7 @@ if (elevenLabsTestBtn) {
     });
 }
 
+
 // Model Select
 if (modelSelect) {
     modelSelect.addEventListener('change', async (e) => {
@@ -1829,22 +1877,27 @@ VoiceService.onStart(() => {
     // but usually LLM response triggers this first
 });
 
-// Real audio duration → reschedule arc beats against actual playback length.
-// canplaythrough fires near the start of playback (elapsed ≈ 0), so we treat
-// it as the true t=0 anchor and remap all beats against real ms.
-// NOTE: beat.at === 0.0 already fired during the initial estimate schedule in
-// playEmotionArc(). We skip those here to prevent the double-fire that was
-// causing the avatar to flash the first expression, reset, then fire again.
+// Real audio duration arrives from oncanplaythrough — schedule all pending
+// arc beats (at > 0) against actual playback length from t=0.
+// The at=0 beat already fired in playEmotionArc() above.
 VoiceService.onDuration((realMs) => {
     if (!_pendingArc || _pendingArc.length === 0) return;
     const arc   = _pendingArc;
     const hints = _pendingArcHints;
-    _pendingArc = null; // prevent double-reschedule if canplaythrough fires again
-    // Filter out the at=0 beat — it already fired on the estimate schedule
-    const remainingBeats = arc.filter(b => b.at > 0);
-    if (remainingBeats.length === 0) return;
-    console.log(`[Arc] Rescheduling ${remainingBeats.length} remaining beats with real duration: ${realMs.toFixed(0)}ms`);
-    _scheduleArcBeats(remainingBeats, realMs, hints, 0);
+    _pendingArc = null; // prevent double-schedule if canplaythrough fires twice
+    console.log(`[Arc] Scheduling ${arc.length} beats synced to audio (${realMs.toFixed(0)}ms)`);
+    _scheduleArcBeats(arc, realMs, hints, 0);
+});
+
+// Fallback: if onDuration never fired (e.g. very short clip) but audio started,
+// fire any still-pending beats immediately against a 1500ms floor estimate.
+VoiceService.onAudioStart(() => {
+    if (!_pendingArc || _pendingArc.length === 0) return;
+    const arc   = _pendingArc;
+    const hints = _pendingArcHints;
+    _pendingArc = null;
+    console.log(`[Arc] onAudioStart fallback — scheduling ${arc.length} beats (1500ms floor)`);
+    _scheduleArcBeats(arc, 1500, hints, 0);
 });
 
 VoiceService.onEnd(() => {

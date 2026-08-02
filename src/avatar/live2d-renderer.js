@@ -71,7 +71,9 @@ export class Live2DRenderer {
             resizeTo: this.container,
             antialias: true,
             resolution: window.devicePixelRatio || 1,
-            autoDensity: true
+            autoDensity: true,
+            powerPreference: 'high-performance',  // request discrete GPU
+            preserveDrawingBuffer: false,          // don't retain framebuffer (faster)
         });
 
         this.container.appendChild(this.app.view);
@@ -281,7 +283,9 @@ export class Live2DRenderer {
     _onTick(delta) {
         if (this.isDestroyed || !this.model) return;
 
-        const dt = delta / 60; // Convert to seconds (assuming 60fps base)
+        // deltaMS gives actual elapsed milliseconds — correct at any refresh rate
+        // (144hz, 165hz, 60hz all produce smooth identical animation speed)
+        const dt = (this.app.ticker.deltaMS / 1000);
 
         // Smooth interpolation of target values
         this._interpolateValues(dt);

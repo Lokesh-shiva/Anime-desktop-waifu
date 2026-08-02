@@ -21,12 +21,12 @@ const OllamaAdapter = {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), DEFAULT_CONFIG.timeout);
 
-        // Use override prompt if provided, else default
         const systemPrompt = options.systemInstruction || DEFAULT_CONFIG.systemPrompt;
+        const history = Array.isArray(options.conversationHistory) ? options.conversationHistory : [];
 
-        // Use chat API with proper message roles to prevent instruction leaking
         const messages = [
             { role: 'system', content: systemPrompt },
+            ...history.map(m => ({ role: m.role, content: m.content })),
             { role: 'user', content: prompt }
         ];
 
@@ -81,8 +81,11 @@ const OllamaAdapter = {
         const timeoutId = setTimeout(() => controller.abort(), DEFAULT_CONFIG.timeout);
 
         const systemPrompt = options.systemInstruction || DEFAULT_CONFIG.systemPrompt;
+        const history = Array.isArray(options.conversationHistory) ? options.conversationHistory : [];
+
         const messages = [
             { role: 'system', content: systemPrompt },
+            ...history.map(m => ({ role: m.role, content: m.content })),
             { role: 'user',   content: prompt }
         ];
 

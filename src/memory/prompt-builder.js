@@ -79,14 +79,8 @@ export function buildSystemPrompt(memoryContext, presenceHints, recentMessages, 
         }
     }
 
-    // ── Recent conversation turns ────────────────────────────────────────────
-    if (recentTurns.length > 0) {
-        prompt += `\n[This conversation so far]\n`;
-        for (const msg of recentTurns) {
-            const speaker = msg.role === 'user' ? 'them' : 'you';
-            prompt += `${speaker}: ${msg.content}\n`;
-        }
-    }
+    // Recent conversation turns are now passed as proper messages[] to the LLM API
+    // — no longer duplicated here in the system prompt text.
 
     // ── Long-term memory ─────────────────────────────────────────────────────
     if (hasSummary || hasPrevious || hasFacts) {

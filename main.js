@@ -3,6 +3,19 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+// ── GPU optimisation — must be called BEFORE app 'ready' ─────────────────────
+// Forces Electron onto the discrete NVIDIA GPU instead of Intel integrated.
+// Critical for smooth Live2D rendering on dual-GPU laptops (Optimus/MUX).
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('enable-oop-rasterization');
+// Force high-performance GPU on NVIDIA Optimus systems
+app.commandLine.appendSwitch('force_high_performance_gpu');
+// Disable frame rate throttling when window is in background / occluded
+app.commandLine.appendSwitch('disable-frame-rate-limit');
+app.commandLine.appendSwitch('disable-gpu-vsync');
+
 let mainWindow = null;
 let avatarWindow = null;
 let tray = null;
@@ -607,11 +620,40 @@ const TTS_PORT = 19765;
 const TTS_MAX_RETRIES = 5;
 const TTS_RETRY_DELAY_MS = 3000;
 
+// Kill any stale process on TTS_PORT (e.g. orphaned from a previous run)
+function killPortStalker() {
+    if (process.platform !== 'win32') return;
+    try {
+        const { spawnSync } = require('child_process');
+        const netstat = spawnSync('netstat', ['-ano'], { encoding: 'utf8' });
+        if (!netstat.stdout) return;
+        for (const line of netstat.stdout.split('\n')) {
+            if (line.includes(`:${TTS_PORT} `) && line.includes('LISTEN')) {
+                const parts = line.trim().split(/\s+/);
+                const pid = parseInt(parts[parts.length - 1], 10);
+                if (pid > 4) {
+                    spawnSync('taskkill', ['/F', '/PID', String(pid)]);
+                    console.log(`[Main] Killed stale process on port ${TTS_PORT} (pid=${pid})`);
+                }
+                break;
+            }
+        }
+    } catch (_) { /* No stale process — ignore */ }
+}
+
 // Start TTS server on app ready with retry logic
 function startTTSServer() {
+    killPortStalker();
     console.log('[Main] Starting TTS server...');
-    const pythonCmd = 'python'; // Assume 'python' is in PATH and is 3.9+
-    const scriptPath = path.join(resourcesBase, 'tts', 'tts_server.py');
+    const ttsDir    = path.join(resourcesBase, 'tts');
+    const scriptPath = path.join(ttsDir, 'tts_server.py');
+
+    // Prefer venv python (keeps deps isolated), fall back to system python
+    const venvPython = process.platform === 'win32'
+        ? path.join(ttsDir, '.venv', 'Scripts', 'python.exe')
+        : path.join(ttsDir, '.venv', 'bin', 'python');
+    const pythonCmd = fs.existsSync(venvPython) ? venvPython : 'python';
+    console.log('[Main] Using Python:', pythonCmd);
 
     // Check if script exists
     if (!fs.existsSync(scriptPath)) {
@@ -620,7 +662,10 @@ function startTTSServer() {
     }
 
     ttsProcess = spawn(pythonCmd, [scriptPath, '--port', TTS_PORT.toString()], {
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'],
+        // Force UTF-8 on Windows — default cp1252 crashes when Python tries to
+        // log Japanese characters (UnicodeEncodeError in loguru → server exit 1)
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }
     });
 
     ttsProcess.stdout.on('data', (data) => {

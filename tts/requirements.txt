@@ -1,6 +1,9 @@
+# Install into the isolated venv:
+#   cd tts && py -3.11 -m venv .venv
+#   .venv\Scripts\python -m pip install -r requirements.txt
 fastapi>=0.100.0
 uvicorn>=0.23.0
-pyttsx3>=2.90
 soundfile>=0.12.0
 numpy>=1.24.0
 python-multipart>=0.0.6
+comtypes>=1.4.0
