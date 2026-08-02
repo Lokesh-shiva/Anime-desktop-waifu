@@ -49,6 +49,8 @@ system_tts = SystemTTS()
 
 # ─── MioTTS (GPU-accelerated local neural TTS) ───────────────────────────────
 
+import random
+import re
 import subprocess
 from pathlib import Path
 
@@ -57,6 +59,14 @@ MIOTTS_BIN    = MIOTTS_DIR / "build" / "miotts.exe"
 MIOTTS_MODEL  = MIOTTS_DIR / "models" / "MioTTS-0.6B-Q8_0.gguf"
 MIOTTS_CODEC  = MIOTTS_DIR / "models" / "miocodec.gguf"
 MIOTTS_VOICE  = MIOTTS_DIR / "models" / "cartethyia.emb.gguf"
+
+# Empirically, stable generations run ~10-12 speech codes per word. Runaway
+# generation (drawn-out/trembling vowels, or hitting the 700-token cap) shows
+# up as 25+ codes per word. This threshold catches the bad case with margin.
+MIOTTS_CODES_PER_WORD_LIMIT = 18
+MIOTTS_MAX_ATTEMPTS = 3
+
+_CODES_LINE_RE = re.compile(r"T=(\d+) codes")
 
 
 class MioTTS:
@@ -68,7 +78,7 @@ class MioTTS:
             and MIOTTS_VOICE.exists()
         )
 
-    def synthesize(self, text: str, output_file: str):
+    def _run_once(self, text: str, output_file: str, seed: int):
         result = subprocess.run(
             [
                 str(MIOTTS_BIN),
@@ -76,6 +86,7 @@ class MioTTS:
                 "-c", str(MIOTTS_CODEC),
                 "-v", str(MIOTTS_VOICE),
                 "-ngl", "99",
+                "--seed", str(seed),
                 "-p", text,
                 "-o", output_file,
             ],
@@ -86,6 +97,36 @@ class MioTTS:
         if result.returncode != 0:
             logger.error(f"MioTTS failed (exit {result.returncode}): {result.stderr}")
             raise RuntimeError(f"MioTTS synthesis failed: {result.stderr[:200]}")
+
+        match = _CODES_LINE_RE.search(result.stderr)
+        n_codes = int(match.group(1)) if match else None
+        return n_codes
+
+    def synthesize(self, text: str, output_file: str):
+        word_count = max(1, len(text.split()))
+
+        for attempt in range(1, MIOTTS_MAX_ATTEMPTS + 1):
+            seed = random.randint(1, 2**31 - 1)
+            n_codes = self._run_once(text, output_file, seed)
+
+            if n_codes is None:
+                # Couldn't parse the codes line — trust the result, nothing more to check.
+                return
+
+            ratio = n_codes / word_count
+            if ratio <= MIOTTS_CODES_PER_WORD_LIMIT:
+                return
+
+            logger.warning(
+                f"MioTTS: attempt {attempt}/{MIOTTS_MAX_ATTEMPTS} looks unstable "
+                f"({n_codes} codes / {word_count} words = {ratio:.1f}/word, "
+                f"seed={seed}) — retrying with a new seed"
+            )
+
+        raise RuntimeError(
+            f"MioTTS synthesis unstable after {MIOTTS_MAX_ATTEMPTS} attempts "
+            f"(last ratio {ratio:.1f} codes/word)"
+        )
 
 
 mio_tts = MioTTS()

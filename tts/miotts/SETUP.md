@@ -55,6 +55,28 @@ What the patches do (see `local_patches.diff` for the full diff):
   expressive text) and could occasionally still blow through the token cap
   even with the repetition penalty in place. `0.5` was stable across neutral,
   happy, and sad English test phrases.
+- **`src/main.cpp`, `src/test-to-speech.h/cpp`**: adds a `--seed N` CLI flag
+  (previously hardcoded to seed 42 everywhere). This isn't just a debug knob —
+  `tts_server.py` relies on it for two things: (1) picking a fresh random seed
+  per synthesis call instead of reusing 42 for every single line (so lines
+  don't all share one fixed prosody "flavor"), and (2) retrying with a new
+  random seed when a generation looks unstable (see below), since retrying
+  with the same seed would just reproduce the identical bad output.
+
+**Runaway-generation instability isn't limited to exact stutters.** Testing
+found that punctuation-dense, choppy text with near-repeated word roots (not
+exact repeats) — e.g. `"run"`/`"running"` and `"care"`/`"caring"` both
+appearing in one short reply — can trigger the same drawn-out/trembling-vowel
+breakdown, generating 25-35+ speech codes per word instead of the normal
+~10-12/word. This is broader than the single-word-stutter pattern documented
+below and isn't reliably preventable by rephrasing text, so it's handled at
+the TTS layer instead: `tts_server.py`'s `MioTTS.synthesize()` (see that file)
+parses the `T=<N> codes` line MioTTS prints, compares it against the input's
+word count, and retries with a new random seed (up to 3 attempts total) if the
+ratio exceeds `MIOTTS_CODES_PER_WORD_LIMIT` (18). If still unstable after all
+attempts, it raises and the existing SAPI5 fallback in `/synthesize` kicks in.
+Retrying with a different seed doesn't always fix it (some seeds still
+produce a bad ratio), but empirically it usually resolves within 1-2 retries.
 
 **Known limitation — Japanese / mixed-script text:** even with the above
 fixes, this checkpoint (`MioTTS-0.6B-Q8_0.gguf`) is unstable on Japanese and
@@ -64,13 +86,13 @@ to full breakdown (screaming/garbled noise) and failure to terminate
 generation (hits the 700-token cap). Tried and ruled out: raising the
 repetition penalty further (1.3→1.5, no meaningful improvement) and switching
 to the 1.2B model (worse, not better — full breakdown on the same test phrase).
-The practical fix applied instead: [llm-interface.js](../../src/llm/llm-interface.js)'s
-"Language" section was dialed back to use Japanese only rarely (at most one
-plain word every several responses, never repeated/stuttered, never adjacent
-to `!`) so this failure mode is triggered far less often. If revisiting this,
-the next thing to try would be a different codec/LLM pairing or checking
-whether the tokenizer handles Japanese BPE merges correctly for this specific
-GGUF export — this wasn't root-caused, only worked around.
+The fix applied: [llm-interface.js](../../src/llm/llm-interface.js)'s "Language"
+section (Japanese flavor words) was removed from Miko's personality prompt
+entirely — the earlier "use it rarely" mitigation still let it surface often
+enough to keep breaking. If revisiting this, the next thing to try would be a
+different codec/LLM pairing or checking whether the tokenizer handles Japanese
+BPE merges correctly for this specific GGUF export — this was never
+root-caused, only avoided by not generating Japanese text at all.
 
 ## 3. Build (with CUDA/GPU offload)
 
