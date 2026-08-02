@@ -111,6 +111,18 @@ function textSimilarity(a, b) {
     return intersection.length / union.size;
 }
 
+/**
+ * True if `content` appears verbatim (ignoring case/punctuation) inside
+ * `conversationText` — i.e. the model echoed back a line of dialogue
+ * instead of extracting an actual fact about the user.
+ */
+function looksLikeRawDialogue(content, conversationText) {
+    const normalize = (s) => s.toLowerCase().replace(/[^\w\s]/g, '').trim();
+    const normalizedContent = normalize(content);
+    if (!normalizedContent) return true;
+    return normalize(conversationText).includes(normalizedContent);
+}
+
 class MemoryManager {
     constructor() {
         this.recentMessages   = []; // Rolling buffer
@@ -596,6 +608,11 @@ Analyze and update memory.`;
             if (result.facts && Array.isArray(result.facts)) {
                 for (const newFact of result.facts) {
                     if (!newFact.content) continue;
+
+                    if (looksLikeRawDialogue(newFact.content, conversationText)) {
+                        console.log('[Memory] Rejected fact (looks like raw dialogue):', newFact.content);
+                        continue;
+                    }
 
                     if (newFact.reinforces) {
                         const existingFact = this._findFactByContent(newFact.reinforces);
