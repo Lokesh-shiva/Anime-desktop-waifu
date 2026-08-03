@@ -50,6 +50,7 @@ import {
 } from './settings.js';
 import { ELEVENLABS_VOICES, DEFAULT_VOICE_ID } from './voice/elevenlabs-adapter.js';
 import { initWizard, isWizardActive } from './wizard.js';
+import { initDiscordBridge } from './discord/discord-renderer.js';
 
 // Expose memoryManager globally for DevTools debugging
 window.memoryManager = memoryManager;
@@ -1937,6 +1938,9 @@ WeatherContext.init().catch(() => {});
 // On finish it reloads the page so all settings apply cleanly; the startup
 // greeting then fires and detects isFirstMeeting() for the warm welcome.
 initWizard();
+
+// Discord chat bridge — no-op if not configured/enabled
+initDiscordBridge();
 
 // Dev-mode gating — show Debug tab + test helpers only in dev builds
 (async () => {
