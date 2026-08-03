@@ -10,6 +10,7 @@ import { BrainRouter } from '../llm/brain-router.js';
 import { DEFAULT_CONFIG } from '../llm/llm-interface.js';
 import { AvatarBridge } from '../avatar/avatar-bridge.js';
 import { VoiceService } from '../voice/voice-service.js';
+import { playEmotionArc } from '../renderer.js';
 
 const MAX_STREAM_HISTORY_TURNS = 10;
 
@@ -27,7 +28,15 @@ function formatBatchAsPrompt(messages) {
     return messages.map(m => `[${m.username}]: ${m.content}`).join('\n');
 }
 
-function waitForSpeechToFinish() {
+// VoiceService.speak() resolves once playback STARTS, not once it ends
+// (see audio-player.js's play() — it awaits audio.play() and returns right
+// after). So we must await speak() itself first (covers however long
+// synthesis takes, including MioTTS retries), THEN poll isPlaying() until
+// it actually finishes. Polling alone with a fixed initial delay is wrong —
+// synthesis can take much longer than any fixed delay, which was causing
+// "done speaking" to fire while she was still mid-synthesis, freeing the
+// queue too early and cutting her off mid-response.
+function waitUntilDonePlaying() {
     return new Promise((resolve) => {
         const check = () => {
             if (!VoiceService.isPlaying()) {
@@ -36,8 +45,7 @@ function waitForSpeechToFinish() {
                 setTimeout(check, 300);
             }
         };
-        // Give speak() a moment to actually start before polling for "done"
-        setTimeout(check, 500);
+        check();
     });
 }
 
@@ -70,9 +78,17 @@ async function handleBatch(batch) {
             window.electronAPI.sendDiscordResponse(batch.channelId, responseObj.text);
         }
 
+        // Fire the full emotion arc across the speech duration — same call
+        // the normal chat flow makes (src/renderer.js's STATES.RESPONDING
+        // handler) — this drives lip-sync/expression changes, not just the
+        // single provisional beat above.
+        if (responseObj.emotionArc) {
+            playEmotionArc(responseObj.emotionArc, responseObj.text, responseObj.actionHints || {});
+        }
+
         const emotion = responseObj.emotionArc?.[0];
-        VoiceService.speak(responseObj.text, emotion);
-        await waitForSpeechToFinish();
+        await VoiceService.speak(responseObj.text, emotion);
+        await waitUntilDonePlaying();
     } catch (error) {
         console.error('[DiscordRenderer] Failed to handle batch:', error.message);
     } finally {

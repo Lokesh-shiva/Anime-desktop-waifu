@@ -159,7 +159,7 @@ function _scheduleArcBeats(arc, durationMs, actionHints, elapsedMs = 0) {
  * @param {string} text       - spoken text, used to estimate duration before audio loads
  * @param {Object} actionHints
  */
-function playEmotionArc(arc, text, actionHints = {}) {
+export function playEmotionArc(arc, text, actionHints = {}) {
     if (!arc || arc.length === 0) {
         console.warn('[Arc] No arc to play');
         return;
