@@ -53,6 +53,17 @@ function createWindow() {
 
     mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 
+    // Start Discord bridge if configured, and forward batches to the renderer
+    const discordConfig = loadDiscordConfig();
+    discordBridge.onBatchReady((batch) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('discord-batch-ready', batch);
+        }
+    });
+    if (discordConfig.enabled && discordConfig.token) {
+        discordBridge.start(discordConfig.token);
+    }
+
     // DevTools only in dev mode
     if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
 
@@ -393,6 +404,61 @@ ipcMain.handle('save-memory', async (event, data) => {
         console.error('Failed to save memory:', error);
         return false;
     }
+});
+
+// ============================================
+// Discord Chat Bridge
+// ============================================
+
+const discordBridge = require('./src/discord/discord-bridge.js');
+
+const DISCORD_CONFIG_FILE = 'discord-config.json';
+const discordConfigPath = path.join(userDataPath, DISCORD_CONFIG_FILE);
+
+function loadDiscordConfig() {
+    try {
+        if (fs.existsSync(discordConfigPath)) {
+            return JSON.parse(fs.readFileSync(discordConfigPath, 'utf-8'));
+        }
+    } catch (error) {
+        console.error('[Main] Failed to load Discord config:', error);
+    }
+    return { token: '', enabled: false };
+}
+
+function saveDiscordConfigToDisk(config) {
+    fs.writeFileSync(discordConfigPath, JSON.stringify(config, null, 2), 'utf-8');
+}
+
+ipcMain.handle('get-discord-config', async () => {
+    const config = loadDiscordConfig();
+    return { token: config.token || '', enabled: !!config.enabled };
+});
+
+ipcMain.handle('save-discord-config', async (event, config) => {
+    try {
+        saveDiscordConfigToDisk(config);
+        discordBridge.stop();
+        if (config.enabled && config.token) {
+            discordBridge.start(config.token);
+        }
+        return true;
+    } catch (error) {
+        console.error('[Main] Failed to save Discord config:', error);
+        return false;
+    }
+});
+
+ipcMain.handle('discord-send-response', async (event, channelId, text) => {
+    await discordBridge.sendResponse(channelId, text);
+});
+
+ipcMain.handle('discord-mark-free', async () => {
+    discordBridge.markFree();
+});
+
+ipcMain.handle('discord-get-status', async () => {
+    return discordBridge.getStatus();
 });
 
 // ============================================
