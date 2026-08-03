@@ -49,6 +49,26 @@ export class ScreenWatcher {
         return null;
     }
 
+    /**
+     * One-off capture + analysis, bypassing the diff-check and NOT updating
+     * this._context / this._lastBase64 / this._reactionConsumed — those
+     * belong to the ambient periodic-polling system. Used when the user
+     * directly asks what Miko can see, so the answer is always fresh.
+     * @returns {Promise<{activity: string|null, shouldReact: boolean, reactionHint: string|null, timestamp: number}|null>}
+     */
+    async captureNow() {
+        try {
+            const base64 = await window.electronAPI.captureScreen();
+            if (!base64) return null;
+
+            const result = await VisionAdapter.analyzeScreen(base64);
+            return { ...result, timestamp: Date.now() };
+        } catch (e) {
+            console.warn('[ScreenWatcher] captureNow error:', e.message);
+            return null;
+        }
+    }
+
     async _tick() {
         try {
             const base64 = await window.electronAPI.captureScreen();
