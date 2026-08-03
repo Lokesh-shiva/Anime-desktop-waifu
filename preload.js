@@ -37,5 +37,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // App version + auto-launch
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
     getAutoLaunch: () => ipcRenderer.invoke('get-auto-launch'),
-    setAutoLaunch: (enabled) => ipcRenderer.invoke('set-auto-launch', enabled)
+    setAutoLaunch: (enabled) => ipcRenderer.invoke('set-auto-launch', enabled),
+
+    // Discord chat bridge
+    getDiscordConfig: () => ipcRenderer.invoke('get-discord-config'),
+    saveDiscordConfig: (config) => ipcRenderer.invoke('save-discord-config', config),
+    onDiscordBatchReady: (callback) => ipcRenderer.on('discord-batch-ready', (_, batch) => callback(batch)),
+    sendDiscordResponse: (channelId, text) => ipcRenderer.invoke('discord-send-response', channelId, text),
+    discordMarkFree: () => ipcRenderer.invoke('discord-mark-free'),
+    getDiscordStatus: () => ipcRenderer.invoke('discord-get-status')
 });
