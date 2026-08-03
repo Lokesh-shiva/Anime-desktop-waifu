@@ -110,6 +110,30 @@ export class CameraWatcher {
         return null;
     }
 
+    /**
+     * One-off capture + analysis, NOT updating this._context / _prevIsPresent /
+     * _prevUserState / _focusedStreak / _readCount and NOT running
+     * _detectTypedReaction() — those belong to the ambient reaction system
+     * (noticed_you / are_you_okay / looking_focused). Used when the user
+     * directly asks what Miko sees on camera, so the answer is always fresh.
+     * Returns null if the camera stream isn't currently active.
+     * @returns {Promise<{isPresent: boolean, userState: string, shouldReact: boolean, reactionHint: string|null, timestamp: number}|null>}
+     */
+    async captureNow() {
+        if (!this._video || !this._stream) return null;
+
+        try {
+            const base64 = this._captureFrame();
+            if (!base64) return null;
+
+            const result = await VisionAdapter.analyzeCamera(base64);
+            return { ...result, timestamp: Date.now() };
+        } catch (e) {
+            console.warn('[CameraWatcher] captureNow error:', e.message);
+            return null;
+        }
+    }
+
     async _tick() {
         if (!this._video || !this._stream) return;
 
