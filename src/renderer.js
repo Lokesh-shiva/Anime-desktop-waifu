@@ -51,6 +51,7 @@ import {
 import { ELEVENLABS_VOICES, DEFAULT_VOICE_ID } from './voice/elevenlabs-adapter.js';
 import { initWizard, isWizardActive } from './wizard.js';
 import { initDiscordBridge } from './discord/discord-renderer.js';
+import { detectVisionIntent } from './vision/vision-intent.js';
 
 // Expose memoryManager globally for DevTools debugging
 window.memoryManager = memoryManager;
@@ -468,12 +469,33 @@ async function handleSubmit() {
         AvatarBridge.sendToneHint(presenceHints.timeOfDay);
         AvatarBridge.sendTypingRhythm(presenceHints.inputRhythm);
 
+        // 3.5. On-demand vision check — if they're directly asking what Miko
+        // sees, do a fresh capture for this turn instead of using whatever
+        // the ambient watcher last captured (which could be up to 4 min old).
+        // Falls back to the cached context for any channel not asked about.
+        let turnVisionContext = getVisionContext();
+        const visionIntent = detectVisionIntent(query);
+        if (visionIntent) {
+            const wantScreen = (visionIntent === 'screen' || visionIntent === 'both') && isScreenVisionEnabled();
+            const wantCamera = (visionIntent === 'camera' || visionIntent === 'both') && isCameraVisionEnabled();
+
+            const [freshScreen, freshCamera] = await Promise.all([
+                wantScreen ? screenWatcher.captureNow() : Promise.resolve(null),
+                wantCamera ? cameraWatcher.captureNow() : Promise.resolve(null)
+            ]);
+
+            turnVisionContext = {
+                screen: freshScreen || turnVisionContext.screen,
+                camera: freshCamera || turnVisionContext.camera
+            };
+        }
+
         // 4. Build System Prompt with Memory + Presence + Vision + recent turns
         const systemInstruction = buildSystemPrompt(
             memoryContext,
             presenceHints,
             memoryManager.recentMessages,
-            getVisionContext()
+            turnVisionContext
         );
 
         // 5. Generate Response (streaming — avatar reacts on first [EMOTION:…] token,
