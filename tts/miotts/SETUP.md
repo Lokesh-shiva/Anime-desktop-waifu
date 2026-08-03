@@ -4,6 +4,53 @@ MioTTS runs as a standalone C++ binary (not a Python package). This is a one-tim
 build step — `src/`, `build/`, and `models/` are all gitignored; only this doc
 and `local_patches.diff` are committed.
 
+## Status summary (as of 2026-08-03)
+
+**Working well:**
+- Local GPU-accelerated inference on the RTX 5050 (~0.6-1GB VRAM), fast enough
+  for real-time chat and for the Discord streaming bridge
+- Clean, stable English speech with the current settings (temperature 0.5,
+  `top_k(50)`, repetition penalty 1.5, a fresh random seed per line)
+- Zero-shot voice cloning from a short (5-25s) clean reference clip — Miko
+  currently speaks with a cloned "Cartethyia" voice, not a stock preset
+- Automatic detect-and-retry in `tts_server.py`: generations that look
+  unstable (25+ speech codes per word) are retried with a new seed, falling
+  back to SAPI5 after 3 failed attempts — this recovers most bad generations
+  without the user ever hearing them
+- Fully integrated as the default TTS engine app-wide (normal chat and the
+  Discord bridge both go through it), with SAPI5 always available as a
+  fallback if MioTTS is unavailable or fails
+- Emotion/prosody comes through reasonably well from plain text/punctuation
+  alone — no explicit emotion tags needed for happy/sad/angry etc. to read
+  correctly
+
+**Not working / known limitations:**
+- **Japanese and mixed-script text is unstable regardless of script** (kana
+  or romaji both break the same way) — worked around by removing Japanese
+  from Miko's personality prompt entirely, not fixed at the model level. See
+  "Cross-cutting finding" below for the generalized version of this problem.
+- **Stutter/near-repeat patterns can still trigger instability in English
+  too** — any text with a word or word-root repeated in a short span (`"I...
+  I"`, `"run"`/`"running"` + `"care"`/`"caring"` in one reply) can produce
+  drawn-out/trembling vowels or runaway generation. The seed-retry logic
+  usually recovers within 1-2 attempts, but the underlying trigger isn't
+  eliminated — it's caught and re-rolled, not prevented.
+- **Not every bad generation self-heals** — some seeds still produce a bad
+  ratio on retry; the 3-attempt cap exists because retrying isn't guaranteed
+  to succeed.
+- **Zero-shot cloning has a real ceiling**: it doesn't reliably reproduce
+  out-of-domain voices (e.g. stylized game-character performances) even from
+  a clean, short reference clip. Tested with two different source clips —
+  this reads as a genuine model-capability limit for this 0.6B checkpoint,
+  not something more input cleanup fixes.
+- **Bigger isn't better**: the 1.2B model was tested head-to-head on the same
+  instability case and was *worse* (full breakdown), not better. Scaling up
+  the model size is not a viable fix path for the instability.
+- **Root cause never found**: every fix applied (prompt-template correction,
+  sampler tuning, seed-retry) is a mitigation around a model behavior that
+  was never actually root-caused. It's plausibly a tokenizer/BPE handling
+  issue or a training-data gap, but that was never confirmed.
+
 ## Prerequisites
 - CMake 3.14+ (`cmake --version`)
 - Visual Studio Build Tools with the "Desktop development with C++" workload
