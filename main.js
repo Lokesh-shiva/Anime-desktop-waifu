@@ -156,6 +156,39 @@ function saveAvatarSettings(updates) {
 }
 
 /**
+ * Clamp a window's top-left position so its full bounds stay within the
+ * work area of whichever display it's closest to. Prevents the frameless,
+ * skipTaskbar avatar window (and its in-window settings gear) from ending
+ * up somewhere the cursor can never reach.
+ */
+function clampToVisibleArea(x, y, width, height) {
+    const display = screen.getDisplayNearestPoint({ x: x + width / 2, y: y + height / 2 });
+    const wa = display.workArea;
+    const maxX = wa.x + Math.max(0, wa.width - width);
+    const maxY = wa.y + Math.max(0, wa.height - height);
+    return {
+        x: Math.min(Math.max(x, wa.x), maxX),
+        y: Math.min(Math.max(y, wa.y), maxY)
+    };
+}
+
+/**
+ * Snap the avatar window back inside the visible work area if it has
+ * drifted off-screen (e.g. from a stale saved position after an unplug of
+ * a second monitor, or a drag that went too far). Safe to call any time.
+ */
+function resetAvatarPositionIfOffscreen() {
+    if (!avatarWindow || avatarWindow.isDestroyed()) return;
+    const [x, y] = avatarWindow.getPosition();
+    const [width, height] = avatarWindow.getSize();
+    const clamped = clampToVisibleArea(x, y, width, height);
+    if (clamped.x !== x || clamped.y !== y) {
+        avatarWindow.setPosition(clamped.x, clamped.y);
+        saveAvatarSettings({ windowX: clamped.x, windowY: clamped.y });
+    }
+}
+
+/**
  * Rebuild the tray context menu so the Avatar toggle label stays in sync.
  * Called on creation and whenever the avatar window is shown/hidden/closed.
  */
@@ -184,6 +217,23 @@ function rebuildTrayMenu() {
                 setTimeout(rebuildTrayMenu, 80);
             }
         },
+        {
+            label: 'Reset Avatar Position',
+            click: () => {
+                if (!avatarWindow || avatarWindow.isDestroyed()) {
+                    createAvatarWindow();
+                    return;
+                }
+                const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+                const wa = display.workArea;
+                const [width, height] = avatarWindow.getSize();
+                const x = wa.x + 50;
+                const y = wa.y + 100;
+                avatarWindow.setPosition(x, y);
+                saveAvatarSettings({ windowX: x, windowY: y });
+                avatarWindow.show();
+            }
+        },
         { type: 'separator' },
         {
             label: 'Quit',
@@ -205,10 +255,13 @@ function createAvatarWindow() {
 
     // Restore last saved window bounds, fall back to sensible defaults
     const saved = loadAvatarSettings();
-    const winX      = typeof saved.windowX      === 'number' ? saved.windowX      : 50;
-    const winY      = typeof saved.windowY      === 'number' ? saved.windowY      : 100;
     const winWidth  = typeof saved.windowWidth  === 'number' ? saved.windowWidth  : 400;
     const winHeight = typeof saved.windowHeight === 'number' ? saved.windowHeight : 600;
+    const rawX = typeof saved.windowX === 'number' ? saved.windowX : 50;
+    const rawY = typeof saved.windowY === 'number' ? saved.windowY : 100;
+    // Clamp in case the saved position drifted off-screen (monitor unplugged,
+    // dragged past the edge in a prior session) — keeps the settings gear reachable.
+    const { x: winX, y: winY } = clampToVisibleArea(rawX, rawY, winWidth, winHeight);
 
     avatarWindow = new BrowserWindow({
         width:  winWidth,
@@ -244,6 +297,15 @@ function createAvatarWindow() {
     };
     avatarWindow.on('moved',   _saveBounds);
     avatarWindow.on('resized', _saveBounds);
+
+    // After a drag finishes (native app-region drag fires 'moved' repeatedly
+    // while dragging, then goes quiet), snap back on-screen if the window was
+    // dragged past the edge — otherwise the gear icon becomes unreachable.
+    let _moveEndTimer = null;
+    avatarWindow.on('moved', () => {
+        clearTimeout(_moveEndTimer);
+        _moveEndTimer = setTimeout(resetAvatarPositionIfOffscreen, 250);
+    });
 
     avatarWindow.on('show',   () => rebuildTrayMenu());
     avatarWindow.on('hide',   () => rebuildTrayMenu());
