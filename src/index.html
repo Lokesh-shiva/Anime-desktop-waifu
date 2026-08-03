@@ -221,6 +221,18 @@
           </div>
         </div>
 
+        <div id="discord-settings-group" class="setting-section">
+          <div class="section-label">Discord Streaming</div>
+          <label class="section-label" for="discord-token-input">Bot Token</label>
+          <input type="password" id="discord-token-input" class="glass-input"
+                 placeholder="Paste your Discord bot token">
+          <label class="radio-option" style="margin-top:10px;">
+            <input type="checkbox" id="discord-enable-toggle">
+            <span>Enable Discord bridge</span>
+          </label>
+          <div id="discord-status-line" class="hint-text" style="margin-top:6px;">not connected</div>
+        </div>
+
         <div id="elevenlabs-settings-group" class="setting-section hidden">
           <label class="section-label" for="elevenlabs-key-input">ElevenLabs API Key</label>
           <input type="password" id="elevenlabs-key-input" class="glass-input"

@@ -270,6 +270,10 @@ const elevenLabsVoiceSelect = document.getElementById('elevenlabs-voice-select')
 const modelSelect = document.getElementById('model-select');
 const groqSttKeyInput = document.getElementById('groq-stt-key-input');
 
+const discordTokenInput = document.getElementById('discord-token-input');
+const discordEnableToggle = document.getElementById('discord-enable-toggle');
+const discordStatusLine = document.getElementById('discord-status-line');
+
 // Typing rhythm tracking (for input sensitivity)
 let keyTimestamps = [];
 
@@ -1460,6 +1464,44 @@ if (elevenLabsKeyInput) {
             setElevenLabsApiKey(e.target.value.trim());
         }, 500);
     });
+}
+
+// Discord bridge settings
+async function saveDiscordSettings() {
+    await window.electronAPI.saveDiscordConfig({
+        token: discordTokenInput.value.trim(),
+        enabled: discordEnableToggle.checked
+    });
+    refreshDiscordStatus();
+}
+
+async function refreshDiscordStatus() {
+    if (!discordStatusLine) return;
+    const status = await window.electronAPI.getDiscordStatus();
+    if (!status.connected) {
+        discordStatusLine.textContent = 'not connected';
+    } else if (status.activeChannelId) {
+        discordStatusLine.textContent = 'connected — listening (type !stop in Discord to stop)';
+    } else {
+        discordStatusLine.textContent = 'connected — idle, waiting for !start in Discord';
+    }
+}
+
+let discordTokenTimeout;
+if (discordTokenInput) {
+    window.electronAPI.getDiscordConfig().then((config) => {
+        discordTokenInput.value = config.token || '';
+        discordEnableToggle.checked = !!config.enabled;
+        refreshDiscordStatus();
+    });
+
+    discordTokenInput.addEventListener('input', () => {
+        clearTimeout(discordTokenTimeout);
+        discordTokenTimeout = setTimeout(saveDiscordSettings, 500);
+    });
+    discordEnableToggle.addEventListener('change', saveDiscordSettings);
+
+    setInterval(refreshDiscordStatus, 5000);
 }
 
 // Groq STT API key (debounced)
