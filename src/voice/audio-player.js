@@ -98,8 +98,15 @@ export class AudioPlayer {
             console.log('[AudioPlayer] Playback started');
             if (this.playbackStartCallback) this.playbackStartCallback();
 
-            // Start amplitude analysis loop
-            this._analyze();
+            // Start amplitude analysis loop. Uses setInterval rather than
+            // requestAnimationFrame — rAF is throttled/paused by the browser
+            // when the window loses focus or is occluded, which stalls lip
+            // sync exactly when streaming (focus shifts to Discord while she
+            // keeps talking). setInterval keeps ticking regardless of focus.
+            if (this.animationFrameId) {
+                clearInterval(this.animationFrameId);
+            }
+            this.animationFrameId = setInterval(() => this._analyze(), 50);
 
         } catch (error) {
             console.error('[AudioPlayer] Playback failed:', error);
@@ -152,7 +159,7 @@ export class AudioPlayer {
         }
 
         if (this.animationFrameId) {
-            cancelAnimationFrame(this.animationFrameId);
+            clearInterval(this.animationFrameId);
             this.animationFrameId = null;
         }
 
@@ -254,8 +261,6 @@ export class AudioPlayer {
         if (this.amplitudeCallback) {
             this.amplitudeCallback(visualAmp);
         }
-
-        this.animationFrameId = requestAnimationFrame(this._analyze.bind(this));
     }
 
     _handleEnded() {
