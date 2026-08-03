@@ -8,8 +8,9 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 
 const MAX_MESSAGE_LENGTH = 300;
-const RATE_LIMIT_WINDOW_MS = 3000;
-const BATCH_FLUSH_INTERVAL_MS = 500;
+const RATE_LIMIT_WINDOW_MS = 1000;
+const DEBOUNCE_MS = 3000; // wait this long after the last message before replying
+const MAX_BATCH_SIZE = 3; // flush early if this many messages pile up, don't wait forever
 
 // Small static blocklist — extend as needed. Matched case-insensitively as
 // whole words so it doesn't false-positive on substrings of normal words.
@@ -24,7 +25,7 @@ let activeChannelId = null;
 let busy = false;
 let buffer = []; // [{ username, content }]
 let lastMessageAtByUser = new Map(); // userId -> timestamp ms
-let flushTimer = null;
+let debounceTimer = null;
 let batchReadyCallback = null;
 
 function isFilteredOut(discordMessage) {
@@ -42,7 +43,11 @@ function isFilteredOut(discordMessage) {
     return false;
 }
 
-function flushIfReady() {
+function flush() {
+    if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+    }
     if (busy) return;
     if (buffer.length === 0) return;
     if (!batchReadyCallback) return;
@@ -52,6 +57,24 @@ function flushIfReady() {
     busy = true; // set synchronously to prevent a second flush before the
                  // renderer's generation actually starts
     batchReadyCallback({ channelId: activeChannelId, messages });
+}
+
+// Called whenever a new message is buffered (and we're free to eventually
+// respond). Waits DEBOUNCE_MS of quiet before flushing, so someone typing
+// their thought across 2-3 messages gets captured in one batch instead of
+// triggering a separate reply per message. Resets on every new message;
+// flushes early if MAX_BATCH_SIZE is hit so it doesn't wait forever.
+function scheduleFlush() {
+    if (busy) return; // markFree() will call scheduleFlush() again once free
+    if (buffer.length === 0) return;
+
+    if (buffer.length >= MAX_BATCH_SIZE) {
+        flush();
+        return;
+    }
+
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(flush, DEBOUNCE_MS);
 }
 
 function start(token) {
@@ -84,6 +107,7 @@ function start(token) {
         if (content === '!start') {
             activeChannelId = message.channel.id;
             buffer = [];
+            if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
             lastMessageAtByUser.clear();
             message.reply('Miko is now listening here!').catch((e) =>
                 console.error('[DiscordBridge] Failed to reply to !start:', e.message)
@@ -95,6 +119,7 @@ function start(token) {
             if (message.channel.id === activeChannelId) {
                 activeChannelId = null;
                 buffer = [];
+                if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
                 message.reply('Miko has stopped listening.').catch((e) =>
                     console.error('[DiscordBridge] Failed to reply to !stop:', e.message)
                 );
@@ -105,7 +130,14 @@ function start(token) {
         if (!activeChannelId || message.channel.id !== activeChannelId) return;
         if (isFilteredOut(message)) return;
 
-        buffer.push({ username: message.author.username, content });
+        // Guild nickname / display name, not the raw account username (which
+        // is often an ugly handle-and-numbers combo). Falls back to the raw
+        // username if no member/display name is available. Whatever Unicode
+        // styling a display name has comes through as-is — plain JS strings
+        // handle that natively, nothing special needed.
+        const displayName = message.member?.displayName || message.author.username;
+        buffer.push({ username: displayName, content });
+        scheduleFlush();
     });
 
     client.on('error', (err) => {
@@ -116,14 +148,12 @@ function start(token) {
         console.error('[DiscordBridge] Login failed:', err.message);
         client = null;
     });
-
-    flushTimer = setInterval(flushIfReady, BATCH_FLUSH_INTERVAL_MS);
 }
 
 function stop() {
-    if (flushTimer) {
-        clearInterval(flushTimer);
-        flushTimer = null;
+    if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
     }
     if (client) {
         client.destroy();
@@ -153,6 +183,7 @@ async function sendResponse(channelId, text) {
 
 function markFree() {
     busy = false;
+    scheduleFlush(); // in case messages piled up while busy
 }
 
 function getStatus() {
