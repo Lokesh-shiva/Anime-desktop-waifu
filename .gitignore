@@ -25,3 +25,6 @@ dist/
 tts/miotts/models/
 tts/miotts/src/
 tts/miotts/clone_venv/
+
+# GPT-SoVITS evaluation (standalone, not integrated — see tts/GPT_SOVITS_EVALUATION.md)
+tts/gpt-sovits-eval/
