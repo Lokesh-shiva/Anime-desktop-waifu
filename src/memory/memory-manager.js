@@ -66,7 +66,7 @@ const CONFIDENCE = {
 const MEMORY_ANALYZER_PROMPT = `You are a memory extraction module. Output ONLY valid JSON. No explanation, no markdown, no bullet points, no reasoning — just the JSON object.
 
 Extract facts from the conversation and return this exact structure:
-{"facts":[{"content":"fact text","category":"identity|preferences|constraints|projects","reinforces":null,"contradicts":null}],"session_summary":"one sentence"}
+{"facts":[{"content":"fact text","category":"identity|preferences|constraints|projects","reinforces":null,"contradicts":null}],"session_summary":"one sentence","open_thread":"short phrase or null"}
 
 Rules:
 - facts: extract user NAME, preferences, and key facts only. Empty array if nothing notable.
@@ -74,6 +74,7 @@ Rules:
 - reinforces: copy exact content of an existing fact this confirms, else null
 - contradicts: copy exact content of an existing fact this contradicts, else null
 - session_summary: one sentence describing what happened in this conversation
+- open_thread: something they just mentioned that's worth coming back to later in conversation — a hook, not a fact (e.g. "the job interview they're nervous about", "the game they said they'd try"). null if nothing stands out.
 - Ignore greetings, filler, and small talk
 - Never invent facts
 - Never store emotions unless user explicitly states them
@@ -142,8 +143,19 @@ class MemoryManager {
         // Miko's diary entries [{ date, entry }]
         this.diary = [];
 
-        // Load persistent memory
-        this._load();
+        // Rolling anti-repetition fingerprints (session-scoped, not persisted —
+        // staleness past a session makes them useless anyway)
+        this.responseFingerprints = []; // [{ opener, lengthBucket, emotionLabel }]
+
+        // Rolling conversation threads — things worth coming back to (session-scoped)
+        this.threads = []; // [{ text, createdAtTurn }]
+        this.globalTurnCount = 0; // monotonic, unlike this.turnCount which resets every AUTO_ANALYZE_INTERVAL
+
+        // Independent small thought of her own — refreshed at low frequency, persisted
+        this.soloThought = { text: null, generatedAt: 0 };
+
+        // Load persistent memory, then refresh her solo thought if it's stale
+        this._load().then(() => this.maybeRefreshSoloThought()).catch(() => {});
     }
 
     /**
@@ -204,6 +216,11 @@ class MemoryManager {
                     // Restore diary
                     if (Array.isArray(startData.diary)) {
                         this.diary = startData.diary;
+                    }
+
+                    // Restore solo thought
+                    if (startData.soloThought && typeof startData.soloThought.text !== 'undefined') {
+                        this.soloThought = startData.soloThought;
                     }
 
                     // Apply fact confidence decay based on time since last use
@@ -435,6 +452,7 @@ class MemoryManager {
                     mood: this.mood,
                     bond: this.bond,
                     diary: this.diary,
+                    soloThought: this.soloThought,
                     lastSeen: Date.now()
                 };
                 await window.electronAPI.saveMemory(data);
@@ -452,11 +470,13 @@ class MemoryManager {
      * @param {string} userMessage
      * @param {string} assistantResponse
      */
-    addInteraction(userMessage, assistantResponse) {
+    addInteraction(userMessage, assistantResponse, emotionArc = null) {
         // Instant name extraction — no waiting for LLM
         if (userMessage && userMessage !== '[quiet]' && userMessage !== '[camera glance]' && userMessage !== '[app opened]') {
             this._quickExtractName(userMessage);
         }
+
+        this._recordFingerprint(assistantResponse, emotionArc);
 
         this.recentMessages.push({ role: 'user', content: userMessage });
         this.recentMessages.push({ role: 'assistant', content: assistantResponse });
@@ -466,11 +486,100 @@ class MemoryManager {
         }
 
         this.turnCount++;
+        this.globalTurnCount++;
 
         if (this.turnCount >= AUTO_ANALYZE_INTERVAL) {
             this.analyze();
             this.turnCount = 0;
         }
+    }
+
+    /**
+     * Record a lightweight signature of the response just given, for
+     * anti-repetition prompting. Keeps the last 5.
+     * @param {string} assistantResponse
+     * @param {Array} emotionArc
+     */
+    _recordFingerprint(assistantResponse, emotionArc) {
+        if (!assistantResponse) return;
+
+        const words = assistantResponse.trim().split(/\s+/);
+        const opener = words.slice(0, 4).join(' ').toLowerCase();
+        const lengthBucket = words.length < 15 ? 'short' : words.length < 40 ? 'medium' : 'long';
+        const emotionLabel = Array.isArray(emotionArc) && emotionArc.length > 0
+            ? emotionArc[0].label
+            : null;
+
+        this.responseFingerprints.push({ opener, lengthBucket, emotionLabel });
+        if (this.responseFingerprints.length > 5) {
+            this.responseFingerprints.shift();
+        }
+    }
+
+    /**
+     * Returns a prompt-ready warning listing recent openers to avoid, or
+     * null if there's not enough history yet to bother.
+     * @returns {string|null}
+     */
+    getFingerprintWarning() {
+        if (this.responseFingerprints.length < 2) return null;
+        const openers = this.responseFingerprints.map(f => `"${f.opener}"`).join(', ');
+        return `Avoid opening like: ${openers}`;
+    }
+
+    /**
+     * Returns active conversation threads as prompt-ready text, or null.
+     * @returns {string|null}
+     */
+    getActiveThreadsText() {
+        if (this.threads.length === 0) return null;
+        return this.threads.map(t => `- ${t.text}`).join('\n');
+    }
+
+    /**
+     * Refresh her independent "solo thought" if the current one is missing or
+     * older than 3 hours. Fire-and-forget — never blocks chat, never throws
+     * out of the caller. Safe to call any time (e.g. once at startup).
+     */
+    async maybeRefreshSoloThought() {
+        const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
+        const isStale = !this.soloThought.text ||
+            (Date.now() - this.soloThought.generatedAt) > THREE_HOURS_MS;
+        if (!isStale) return;
+
+        try {
+            const hour = new Date().getHours();
+            const timeBucket = hour < 5 ? 'late night' : hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 22 ? 'evening' : 'late night';
+            const recentFacts = this.facts.slice(0, 2).map(f => f.content).join('; ') || 'nothing specific';
+
+            const prompt = `Time of day: ${timeBucket}. Your current mood: ${this.mood.label}. Some things you know about them: ${recentFacts}.
+
+In one short first-person sentence, share one small independent thought of your own right now — an opinion, a minor gripe, or something idly on your mind. Not about them specifically, just something that's yours. Output ONLY the sentence, no quotes, no explanation.`;
+
+            const response = await BrainRouter.generate(prompt, { raw: true });
+            const text = (response || '').trim().replace(/^["']|["']$/g, '');
+            if (text) {
+                this.soloThought = { text, generatedAt: Date.now() };
+                this._save();
+                console.log('[Memory] Solo thought refreshed:', text);
+            }
+        } catch (e) {
+            console.warn('[Memory] Solo thought refresh failed:', e.message);
+            // leave previous value in place — never blocks chat
+        }
+    }
+
+    /**
+     * True if the last user message was very short (<=3 words) — a real,
+     * grounded signal for "they just brushed past something," as opposed to
+     * asking the LLM to invent when she should feel annoyed.
+     * @returns {boolean}
+     */
+    lastReplyWasTerse() {
+        const lastUser = [...this.recentMessages].reverse().find(m => m.role === 'user');
+        if (!lastUser || !lastUser.content) return false;
+        const words = lastUser.content.trim().split(/\s+/).filter(Boolean);
+        return words.length > 0 && words.length <= 3;
     }
 
     /**
@@ -501,6 +610,10 @@ class MemoryManager {
             previousSessions: this.previousSessions,
             moodDescription: this.getMoodDescription(),
             bondPrompt: this.getBondPrompt(),
+            activeThreads: this.getActiveThreadsText(),
+            soloThought: this.soloThought.text,
+            fingerprintWarning: this.getFingerprintWarning(),
+            lastReplyWasTerse: this.lastReplyWasTerse(),
         };
     }
 
@@ -644,6 +757,14 @@ Analyze and update memory.`;
                     }
                 }
             }
+
+            if (result.open_thread && typeof result.open_thread === 'string') {
+                this.threads.push({ text: result.open_thread, createdAtTurn: this.globalTurnCount });
+                if (this.threads.length > 3) this.threads.shift();
+                console.log('[Memory] New thread:', result.open_thread);
+            }
+            // Drop threads older than 8 turns regardless of whether a new one arrived
+            this.threads = this.threads.filter(t => this.globalTurnCount - t.createdAtTurn <= 8);
 
             if (result.session_summary) {
                 // Archive the outgoing summary before replacing it

@@ -533,7 +533,7 @@ async function handleSubmit() {
         );
 
         // 7. Update Memory (in background)
-        memoryManager.addInteraction(query, responseObj.text);
+        memoryManager.addInteraction(query, responseObj.text, responseObj.emotionArc);
         memoryManager.recordInteractionSentiment(responseObj.emotionArc);
 
         StateMachine.transition(EVENTS.LLM_RESPONSE, responseObj);
@@ -638,7 +638,7 @@ async function handleIdleMessage({ timeOfDay, timeContext, minutesSilent, messag
 
         // Log idle interaction to memory with a neutral placeholder so it reads
         // naturally in the next conversation's context window
-        memoryManager.addInteraction('[quiet]', responseObj.text);
+        memoryManager.addInteraction('[quiet]', responseObj.text, responseObj.emotionArc);
         memoryManager.recordInteractionSentiment(responseObj.emotionArc);
 
         StateMachine.transition(EVENTS.LLM_RESPONSE, responseObj);
@@ -706,7 +706,7 @@ async function handleCameraReaction(type, hint) {
         const systemInstruction = buildSystemPrompt(memoryContext, presenceHints, memoryManager.recentMessages, getVisionContext());
 
         const responseObj = await BrainRouter.generateStreaming(idlePrompt, { systemInstruction }, null, null);
-        memoryManager.addInteraction('[camera glance]', responseObj.text);
+        memoryManager.addInteraction('[camera glance]', responseObj.text, responseObj.emotionArc);
         memoryManager.recordInteractionSentiment(responseObj.emotionArc);
         StateMachine.transition(EVENTS.LLM_RESPONSE, responseObj);
     } catch (error) {
@@ -794,7 +794,7 @@ async function handleStartupGreeting() {
         const systemInstruction  = buildSystemPrompt(memoryContext, presenceHints, memoryManager.recentMessages, getVisionContext());
 
         const responseObj = await BrainRouter.generateStreaming(greetPrompt, { systemInstruction }, null, null);
-        memoryManager.addInteraction('[app opened]', responseObj.text);
+        memoryManager.addInteraction('[app opened]', responseObj.text, responseObj.emotionArc);
         memoryManager.recordInteractionSentiment(responseObj.emotionArc);
         StateMachine.transition(EVENTS.LLM_RESPONSE, responseObj);
 
