@@ -52,7 +52,9 @@ export function buildSystemPrompt(memoryContext, presenceHints, recentMessages, 
     const hasCamera   = visionContext?.camera?.isPresent && visionContext.camera.userState !== 'unknown';
 
     const hasAnyContext = hasFacts || hasSummary || hasPrevious || hasMood ||
-                          recentTurns.length > 0 || hasScreen || hasCamera;
+                          recentTurns.length > 0 || hasScreen || hasCamera ||
+                          !!memoryContext?.activeThreads || !!memoryContext?.soloThought ||
+                          !!memoryContext?.fingerprintWarning;
     if (!hasAnyContext) return prompt;
 
     prompt += `\n\n=== CONTEXT (internal — never quote or reference directly) ===`;
@@ -65,6 +67,26 @@ export function buildSystemPrompt(memoryContext, presenceHints, recentMessages, 
     // ── Mood ────────────────────────────────────────────────────────────────
     if (hasMood) {
         prompt += `\n\n[Your current mood]\n${memoryContext.moodDescription}\n`;
+    }
+
+    // ── On your mind ───────────────────────────────────────────────────────
+    const hasThreads     = !!memoryContext?.activeThreads;
+    const hasSoloThought = !!memoryContext?.soloThought;
+    const hasFingerprint = !!memoryContext?.fingerprintWarning;
+    if (hasThreads || hasSoloThought || hasFingerprint) {
+        prompt += `\n\n[On your mind]\n`;
+        if (hasThreads) {
+            prompt += `Things you've been meaning to come back to:\n${memoryContext.activeThreads}\n`;
+        }
+        if (hasSoloThought) {
+            prompt += `Something of your own on your mind right now: ${memoryContext.soloThought}\n`;
+        }
+        if (memoryContext?.lastReplyWasTerse) {
+            prompt += `Their last reply was noticeably short — react to that naturally if it fits, don't just glide past it.\n`;
+        }
+        if (hasFingerprint) {
+            prompt += `${memoryContext.fingerprintWarning}\n`;
+        }
     }
 
     // ── Vision context ───────────────────────────────────────────────────────
