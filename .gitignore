@@ -27,5 +27,5 @@ tts/miotts/src/
 tts/miotts/clone_venv/
 
 # GPT-SoVITS sidecar (built locally — see tts/GPT_SOVITS_EVALUATION.md for how it got here)
-tts/gpt-sovits/
+tts/gpt-sovits/*
 !tts/gpt-sovits/run_sidecar.py
