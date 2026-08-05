@@ -332,6 +332,7 @@ app.whenReady().then(() => {
     createWindow();
     createTray();
     startTTSServer();
+    startSidecarServer();
 
     // Global hotkey — Ctrl+Alt+A — activate PTT from anywhere
     const hotkeyRegistered = globalShortcut.register('Control+Alt+A', () => {
@@ -381,6 +382,30 @@ function cleanupTTSServer() {
     }
 }
 
+/**
+ * Forcefully kill the GPT-SoVITS sidecar process
+ */
+function cleanupSidecar() {
+    if (sidecarProcess) {
+        console.log('[Main] Killing GPT-SoVITS sidecar...');
+        try {
+            if (process.platform === 'win32') {
+                const { execSync } = require('child_process');
+                try {
+                    execSync(`taskkill /F /T /PID ${sidecarProcess.pid}`, { stdio: 'ignore' });
+                } catch (e) {
+                    // Process might already be dead
+                }
+            } else {
+                sidecarProcess.kill('SIGKILL');
+            }
+        } catch (e) {
+            console.error('[Main] Error killing GPT-SoVITS sidecar:', e);
+        }
+        sidecarProcess = null;
+    }
+}
+
 app.on('window-all-closed', () => {
     // App lives in the system tray — don't quit when all windows close.
     // Quit only via tray menu or ipcMain 'quit-app'.
@@ -389,16 +414,19 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
     cleanupTTSServer();
+    cleanupSidecar();
 });
 
 app.on('will-quit', () => {
     cleanupTTSServer();
+    cleanupSidecar();
 });
 
 // Handle Ctrl+C from terminal
 process.on('SIGINT', () => {
     console.log('[Main] Received SIGINT. Cleaning up...');
     cleanupTTSServer();
+    cleanupSidecar();
     app.quit();
     process.exit(0);
 });
@@ -406,6 +434,7 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => {
     console.log('[Main] Received SIGTERM. Cleaning up...');
     cleanupTTSServer();
+    cleanupSidecar();
     app.quit();
     process.exit(0);
 });
@@ -748,6 +777,12 @@ const TTS_PORT = 19765;
 const TTS_MAX_RETRIES = 5;
 const TTS_RETRY_DELAY_MS = 3000;
 
+let sidecarProcess = null;
+let sidecarRetryCount = 0;
+const SIDECAR_PORT = 9881;
+const SIDECAR_MAX_RETRIES = 5;
+const SIDECAR_RETRY_DELAY_MS = 3000;
+
 // Kill any stale process on TTS_PORT (e.g. orphaned from a previous run)
 function killPortStalker() {
     if (process.platform !== 'win32') return;
@@ -762,6 +797,27 @@ function killPortStalker() {
                 if (pid > 4) {
                     spawnSync('taskkill', ['/F', '/PID', String(pid)]);
                     console.log(`[Main] Killed stale process on port ${TTS_PORT} (pid=${pid})`);
+                }
+                break;
+            }
+        }
+    } catch (_) { /* No stale process — ignore */ }
+}
+
+// Kill any stale process on SIDECAR_PORT (same pattern as killPortStalker)
+function killSidecarPortStalker() {
+    if (process.platform !== 'win32') return;
+    try {
+        const { spawnSync } = require('child_process');
+        const netstat = spawnSync('netstat', ['-ano'], { encoding: 'utf8' });
+        if (!netstat.stdout) return;
+        for (const line of netstat.stdout.split('\n')) {
+            if (line.includes(`:${SIDECAR_PORT} `) && line.includes('LISTEN')) {
+                const parts = line.trim().split(/\s+/);
+                const pid = parseInt(parts[parts.length - 1], 10);
+                if (pid > 4) {
+                    spawnSync('taskkill', ['/F', '/PID', String(pid)]);
+                    console.log(`[Main] Killed stale process on port ${SIDECAR_PORT} (pid=${pid})`);
                 }
                 break;
             }
@@ -821,6 +877,57 @@ function startTTSServer() {
             setTimeout(startTTSServer, TTS_RETRY_DELAY_MS);
         } else if (code !== 0) {
             console.error('[Main] TTS server failed to start after max retries');
+        }
+    });
+}
+
+// Start GPT-SoVITS sidecar on app ready with retry logic
+function startSidecarServer() {
+    killSidecarPortStalker();
+    console.log('[Main] Starting GPT-SoVITS sidecar...');
+    const sidecarDir    = path.join(resourcesBase, 'tts', 'gpt-sovits');
+    const scriptPath    = path.join(sidecarDir, 'run_sidecar.py');
+
+    if (!fs.existsSync(scriptPath)) {
+        console.log('[Main] GPT-SoVITS sidecar not installed — skipping (MioTTS/SAPI5 remain available)');
+        return;
+    }
+
+    const venvPython = process.platform === 'win32'
+        ? path.join(sidecarDir, '.venv', 'Scripts', 'python.exe')
+        : path.join(sidecarDir, '.venv', 'bin', 'python');
+    const pythonCmd = fs.existsSync(venvPython) ? venvPython : 'python';
+    console.log('[Main] Using Python for sidecar:', pythonCmd);
+
+    sidecarProcess = spawn(pythonCmd, [scriptPath, '-a', '127.0.0.1', '-p', SIDECAR_PORT.toString()], {
+        cwd: sidecarDir,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }
+    });
+
+    sidecarProcess.stdout.on('data', (data) => {
+        console.log('[Sidecar]', data.toString().trim());
+    });
+
+    sidecarProcess.stderr.on('data', (data) => {
+        const msg = data.toString().trim();
+        if (msg.includes('INFO:') || msg.includes('WARNING:')) {
+            console.log('[Sidecar]', msg);
+        } else {
+            console.error('[Sidecar Error]', msg);
+        }
+    });
+
+    sidecarProcess.on('close', (code) => {
+        console.log(`[Main] GPT-SoVITS sidecar exited with code ${code}`);
+        sidecarProcess = null;
+
+        if (code !== 0 && sidecarRetryCount < SIDECAR_MAX_RETRIES) {
+            sidecarRetryCount++;
+            console.log(`[Main] Retrying GPT-SoVITS sidecar in ${SIDECAR_RETRY_DELAY_MS / 1000}s (attempt ${sidecarRetryCount}/${SIDECAR_MAX_RETRIES})...`);
+            setTimeout(startSidecarServer, SIDECAR_RETRY_DELAY_MS);
+        } else if (code !== 0) {
+            console.error('[Main] GPT-SoVITS sidecar failed to start after max retries — MioTTS/SAPI5 remain available');
         }
     });
 }
