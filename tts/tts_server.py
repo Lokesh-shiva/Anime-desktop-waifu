@@ -132,6 +132,47 @@ class MioTTS:
 mio_tts = MioTTS()
 
 
+# ─── GPT-SoVITS (sidecar HTTP client) ────────────────────────────────────────
+
+import requests
+
+GPTSOVITS_URL     = "http://127.0.0.1:9881"
+GPTSOVITS_TIMEOUT = 30  # seconds — covers the 60s-runaway-generation failure
+                        # mode observed in evaluation by failing well before it
+GPTSOVITS_REF_AUDIO = str(Path(__file__).parent / "gpt-sovits" / "ref_audio" / "ref_clip.wav")
+GPTSOVITS_REF_TEXT  = "wants to blend into the crowd. Singing, dancing, and spinning, hand in hand with"
+
+
+class GPTSoVITS:
+    def is_available(self) -> bool:
+        try:
+            resp = requests.get(f"{GPTSOVITS_URL}/", timeout=2)
+            return resp.status_code < 500
+        except Exception:
+            return False
+
+    def synthesize(self, text: str, output_file: str):
+        resp = requests.get(
+            f"{GPTSOVITS_URL}/tts",
+            params={
+                "text": text,
+                "text_lang": "en",
+                "ref_audio_path": GPTSOVITS_REF_AUDIO,
+                "prompt_lang": "en",
+                "prompt_text": GPTSOVITS_REF_TEXT,
+                "text_split_method": "cut5",
+            },
+            timeout=GPTSOVITS_TIMEOUT,
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"GPT-SoVITS synthesis failed (status {resp.status_code}): {resp.text[:200]}")
+        with open(output_file, "wb") as f:
+            f.write(resp.content)
+
+
+gpt_sovits = GPTSoVITS()
+
+
 # ─── API models ───────────────────────────────────────────────────────────────
 
 class SynthesisRequest(BaseModel):
@@ -145,14 +186,9 @@ class SynthesisRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if mio_tts.is_available():
-        logger.info("TTS Server starting (MioTTS available, SAPI5 fallback ready)")
-    else:
-        logger.warning(
-            "TTS Server starting (MioTTS NOT found at %s — falling back to SAPI5. "
-            "See tts/miotts/SETUP.md to build it.)",
-            MIOTTS_BIN,
-        )
+    gptsovits_status = "available" if gpt_sovits.is_available() else "not reachable yet (sidecar may still be loading)"
+    miotts_status = "available" if mio_tts.is_available() else "not found"
+    logger.info(f"TTS Server starting (GPT-SoVITS {gptsovits_status}; MioTTS {miotts_status}; SAPI5 always ready)")
     yield
     logger.info("TTS Server shutting down")
 
@@ -164,9 +200,12 @@ async def health_check():
     engines = ["system"]
     if mio_tts.is_available():
         engines.append("miotts")
+    if gpt_sovits.is_available():
+        engines.append("gptsovits")
+    active = "gptsovits" if gpt_sovits.is_available() else ("miotts" if mio_tts.is_available() else "system")
     return {
         "status": "ready",
-        "active_engine": "miotts" if mio_tts.is_available() else "system",
+        "active_engine": active,
         "available_engines": engines,
     }
 
@@ -182,17 +221,28 @@ async def synthesize(request: SynthesisRequest):
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as fp:
             temp_file = fp.name
 
-        if mio_tts.is_available():
+        if gpt_sovits.is_available():
             try:
-                await asyncio.to_thread(mio_tts.synthesize, request.text, temp_file)
-                engine_used = "miotts"
+                await asyncio.to_thread(gpt_sovits.synthesize, request.text, temp_file)
+                engine_used = "gptsovits"
             except Exception as e:
-                logger.warning(f"MioTTS failed, falling back to SAPI5: {e}")
+                logger.warning(f"GPT-SoVITS failed, falling back: {e}")
+                engine_used = None  # fall through below
+        else:
+            engine_used = None
+
+        if engine_used is None:
+            if mio_tts.is_available():
+                try:
+                    await asyncio.to_thread(mio_tts.synthesize, request.text, temp_file)
+                    engine_used = "miotts"
+                except Exception as e:
+                    logger.warning(f"MioTTS failed, falling back to SAPI5: {e}")
+                    await asyncio.to_thread(system_tts.synthesize, request.text, temp_file)
+                    engine_used = "system"
+            else:
                 await asyncio.to_thread(system_tts.synthesize, request.text, temp_file)
                 engine_used = "system"
-        else:
-            await asyncio.to_thread(system_tts.synthesize, request.text, temp_file)
-            engine_used = "system"
 
         if not os.path.exists(temp_file) or os.path.getsize(temp_file) == 0:
             raise HTTPException(status_code=500, detail="Audio generation failed (empty output)")
