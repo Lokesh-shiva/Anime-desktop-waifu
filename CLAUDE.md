@@ -25,8 +25,9 @@ TTS server (Python) auto-starts on port 19765. LLM runs via LM Studio (port 1234
 | `src/vision/ScreenWatcher.js` | Screen capture → VLM description |
 | `src/vision/CameraWatcher.js` | Webcam → VLM description |
 | `src/settings.js` | All settings getters/setters + localStorage keys |
-| `tts/tts_server.py` | FastAPI TTS server (MioTTS + SAPI5 fallback) |
+| `tts/tts_server.py` | FastAPI TTS server (GPT-SoVITS → MioTTS → SAPI5 cascade) |
 | `tts/.venv/` | Python 3.11 venv — isolated, don't touch globally |
+| `tts/gpt-sovits/run_sidecar.py` | GPT-SoVITS sidecar launcher — spawned separately from `tts_server.py`, own venv, port 9881 |
 | `src/discord/discord-bridge.js` | Discord bot (main process): commands, filtering, batching |
 | `src/discord/discord-renderer.js` | Discord batches → chat pipeline (renderer side) |
 
@@ -58,7 +59,15 @@ Exception: the Discord bot token lives in `discord-config.json` in Electron's `u
 
 ## TTS server
 Python 3.11 venv at `tts/.venv/`. Started by main.js, prefers venv python over system python. Port 19765.
-Engines: **MioTTS** (default, local GPU neural TTS, cloned Cartethyia voice) with **SAPI5** as automatic fallback.
+Engine cascade: **GPT-SoVITS** (primary — cloned Cartethyia voice, best naturalness/breath/pacing) →
+**MioTTS** (fallback — local GPU neural TTS, own C++ binary) → **SAPI5** (last-resort system voice).
+
+GPT-SoVITS runs as a separate sidecar process (`tts/gpt-sovits/run_sidecar.py`, own venv at
+`tts/gpt-sovits/.venv/`, port 9881) spawned alongside the main TTS server — fully isolated dependencies,
+so a GPT-SoVITS issue can never break the main TTS server process. `tts_server.py` calls it over HTTP with
+a 30s timeout; any failure (unreachable, timeout, non-200) falls through to MioTTS automatically.
+See `tts/GPT_SOVITS_EVALUATION.md` for how the reference clip/transcript pairing was chosen and measured.
+
 MioTTS runs as a C++ binary at `tts/miotts/build/miotts.exe` — see `tts/miotts/SETUP.md` for build steps,
 tuning rationale, and known limitations. Unstable generations are auto-detected (codes-per-word ratio)
 and retried with a new random seed before falling back to SAPI5.
