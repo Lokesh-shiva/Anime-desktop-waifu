@@ -88,6 +88,11 @@ export const VoiceService = {
                 return;
             }
 
+            // GPT-SoVITS already produces natural pacing/breaths on its own — the
+            // 0.85x slowdown was tuned for MioTTS/SAPI5's rushed delivery and
+            // double-dips when stacked on top of already-natural audio.
+            this.player.setPlaybackRate(result.engine === 'gptsovits' ? 1.0 : 0.85);
+
             MouthSync.start();
             await this.player.play(result.audio, result.mimeType);
 
