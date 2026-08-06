@@ -10,9 +10,12 @@
         "build:dir": "electron-builder --dir"
     },
     "dependencies": {
+        "@discordjs/voice": "^0.19.2",
         "discord.js": "^14.27.0",
+        "opusscript": "^0.0.8",
         "pixi-live2d-display": "^0.4.0",
-        "pixi.js": "^7.3.2"
+        "pixi.js": "^7.3.2",
+        "tweetnacl": "^1.0.3"
     },
     "devDependencies": {
         "electron": "^28.0.0",
