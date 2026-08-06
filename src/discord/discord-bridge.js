@@ -6,6 +6,16 @@
  */
 
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const {
+    joinVoiceChannel,
+    createAudioPlayer,
+    createAudioResource,
+    entersState,
+    VoiceConnectionStatus,
+    AudioPlayerStatus,
+    StreamType,
+} = require('@discordjs/voice');
+const { Readable } = require('stream');
 
 const EMBED_COLOR = 0xFF9EC4; // soft pink
 
@@ -24,6 +34,8 @@ const BLOCKLIST_RE = new RegExp(
 
 let client = null;
 let activeChannelId = null;
+let voiceConnection = null;
+let audioPlayer = null;
 let busy = false;
 let buffer = []; // [{ username, content }]
 let lastMessageAtByUser = new Map(); // userId -> timestamp ms
@@ -43,6 +55,65 @@ function isFilteredOut(discordMessage) {
     lastMessageAtByUser.set(userId, now);
 
     return false;
+}
+
+async function joinVoice(voiceChannel) {
+    leaveVoice(); // clean up any prior connection first
+
+    voiceConnection = joinVoiceChannel({
+        channelId: voiceChannel.id,
+        guildId: voiceChannel.guild.id,
+        adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+    });
+
+    audioPlayer = createAudioPlayer();
+    voiceConnection.subscribe(audioPlayer);
+
+    await entersState(voiceConnection, VoiceConnectionStatus.Ready, 10_000);
+}
+
+function leaveVoice() {
+    if (audioPlayer) {
+        audioPlayer.stop();
+        audioPlayer = null;
+    }
+    if (voiceConnection) {
+        try { voiceConnection.destroy(); } catch (_) { /* already destroyed */ }
+        voiceConnection = null;
+    }
+}
+
+/**
+ * Play a WAV audio buffer into the active voice connection. Resolves once
+ * playback finishes (or immediately if there's no active voice connection),
+ * so callers can use it as their "done speaking" signal instead of polling.
+ * @param {Buffer} wavBuffer
+ * @returns {Promise<void>}
+ */
+function playAudioBuffer(wavBuffer) {
+    if (!voiceConnection || !audioPlayer) return Promise.resolve();
+
+    return new Promise((resolve) => {
+        const resource = createAudioResource(Readable.from(wavBuffer), {
+            inputType: StreamType.Arbitrary,
+        });
+
+        const onIdle = () => {
+            audioPlayer.off(AudioPlayerStatus.Idle, onIdle);
+            audioPlayer.off('error', onError);
+            resolve();
+        };
+        const onError = (err) => {
+            console.error('[DiscordBridge] Voice playback error:', err.message);
+            audioPlayer.off(AudioPlayerStatus.Idle, onIdle);
+            audioPlayer.off('error', onError);
+            resolve();
+        };
+
+        audioPlayer.once(AudioPlayerStatus.Idle, onIdle);
+        audioPlayer.once('error', onError);
+        audioPlayer.play(resource);
+    });
 }
 
 function flush() {
@@ -93,7 +164,8 @@ function start(token) {
         intents: [
             GatewayIntentBits.Guilds,
             GatewayIntentBits.GuildMessages,
-            GatewayIntentBits.MessageContent
+            GatewayIntentBits.MessageContent,
+            GatewayIntentBits.GuildVoiceStates
         ]
     });
 
@@ -101,7 +173,7 @@ function start(token) {
         console.log(`[DiscordBridge] Logged in as ${client.user.tag}`);
     });
 
-    client.on('messageCreate', (message) => {
+    client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
 
         const content = message.content.trim();
@@ -111,7 +183,20 @@ function start(token) {
             buffer = [];
             if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
             lastMessageAtByUser.clear();
-            message.reply('Miko is now listening here!').catch((e) =>
+
+            const memberVoiceChannel = message.member?.voice?.channel;
+            let replyText = 'Miko is now listening here!';
+            if (memberVoiceChannel) {
+                try {
+                    await joinVoice(memberVoiceChannel);
+                    replyText += ` Joined **${memberVoiceChannel.name}** to speak too.`;
+                } catch (e) {
+                    console.error('[DiscordBridge] Failed to join voice channel:', e.message);
+                    replyText += ' (couldn\'t join your voice channel, text-only for now)';
+                }
+            }
+
+            message.reply(replyText).catch((e) =>
                 console.error('[DiscordBridge] Failed to reply to !start:', e.message)
             );
             return;
@@ -122,6 +207,7 @@ function start(token) {
                 activeChannelId = null;
                 buffer = [];
                 if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+                leaveVoice();
                 message.reply('Miko has stopped listening.').catch((e) =>
                     console.error('[DiscordBridge] Failed to reply to !stop:', e.message)
                 );
@@ -157,6 +243,7 @@ function stop() {
         clearTimeout(debounceTimer);
         debounceTimer = null;
     }
+    leaveVoice();
     if (client) {
         client.destroy();
         client = null;
@@ -199,4 +286,4 @@ function getStatus() {
     };
 }
 
-module.exports = { start, stop, onBatchReady, sendResponse, markFree, getStatus };
+module.exports = { start, stop, onBatchReady, sendResponse, markFree, getStatus, playAudioBuffer };
