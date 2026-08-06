@@ -160,7 +160,20 @@ class GPTSoVITS:
                 "ref_audio_path": GPTSOVITS_REF_AUDIO,
                 "prompt_lang": "en",
                 "prompt_text": GPTSOVITS_REF_TEXT,
-                "text_split_method": "cut5",
+                # cut0 = no sentence splitting, single continuous generation pass.
+                # api_v2.py's default cascade (cut5 + batching) splits responses into
+                # per-sentence chunks processed semi-independently, which measurably
+                # flattened delivery vs. the single-pass generation used during
+                # evaluation. batch_size=1/split_bucket=false/parallel_infer=false
+                # disable the batching machinery entirely — confirmed by ear to
+                # restore the expressiveness from the original evaluation clips.
+                # Longer responses take one continuous pass instead of parallel
+                # chunks (a bit slower for long text), but GPTSOVITS_TIMEOUT covers
+                # any runaway case the same way it always has.
+                "text_split_method": "cut0",
+                "batch_size": 1,
+                "split_bucket": False,
+                "parallel_infer": False,
             },
             timeout=GPTSOVITS_TIMEOUT,
         )
