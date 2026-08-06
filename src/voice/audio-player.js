@@ -20,6 +20,20 @@ export class AudioPlayer {
         this.audioContext = null;
         this.analyser = null;
         this.sourceNode = null;
+        this.gainNode = null;
+        this.muted = false;
+    }
+
+    /**
+     * Mute/unmute output while keeping amplitude analysis (for lip-sync)
+     * fully intact — used when audio is actually being played elsewhere
+     * (e.g. into a Discord voice channel) and this local copy exists only
+     * to drive MouthSync/emotion-arc timing, not to be heard.
+     * @param {boolean} muted
+     */
+    setMuted(muted) {
+        this.muted = muted;
+        if (this.gainNode) this.gainNode.gain.value = muted ? 0 : 1;
     }
 
     /**
@@ -125,7 +139,13 @@ export class AudioPlayer {
         if (!this.analyser) {
             this.analyser = this.audioContext.createAnalyser();
             this.analyser.fftSize = 256;
-            this.analyser.connect(this.audioContext.destination);
+        }
+
+        if (!this.gainNode) {
+            this.gainNode = this.audioContext.createGain();
+            this.gainNode.gain.value = this.muted ? 0 : 1;
+            this.analyser.connect(this.gainNode);
+            this.gainNode.connect(this.audioContext.destination);
         }
 
         // Connect audio element to analyser

@@ -110,6 +110,48 @@ export const VoiceService = {
         }
     },
 
+    /**
+     * Play already-synthesized audio through the local player MUTED, purely
+     * to drive MouthSync/lip-sync and the emotion-arc audio-duration timing
+     * (both wired to `this.player`'s events) — for cases where the audible
+     * sound is actually being played somewhere else (e.g. a Discord voice
+     * channel) and this local copy exists only to keep the avatar's mouth
+     * and reactions in sync with what's actually being heard.
+     *
+     * Always plays at native (1.0x) rate regardless of engine, since the
+     * external playback isn't rate-adjusted either — matching that keeps
+     * lip-sync timing from drifting out of sync with the real audio.
+     * @param {{audio: string, mimeType?: string}} result
+     * @returns {Promise<void>}
+     */
+    async playMuted(result) {
+        if (!result?.audio) return;
+
+        this.player.setPlaybackRate(1.0);
+        this.player.setMuted(true);
+        MouthSync.start();
+
+        try {
+            await this.player.play(result.audio, result.mimeType);
+            await this._waitUntilPlaybackEnds();
+        } finally {
+            this.player.setMuted(false);
+        }
+    },
+
+    _waitUntilPlaybackEnds() {
+        return new Promise((resolve) => {
+            const check = () => {
+                if (!this.player.isPlaying()) {
+                    resolve();
+                } else {
+                    setTimeout(check, 300);
+                }
+            };
+            check();
+        });
+    },
+
     isPlaying() {
         return this.player.isPlaying();
     },

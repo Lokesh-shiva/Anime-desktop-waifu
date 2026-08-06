@@ -9,6 +9,7 @@
 import { BrainRouter } from '../llm/brain-router.js';
 import { DEFAULT_CONFIG } from '../llm/llm-interface.js';
 import { AvatarBridge } from '../avatar/avatar-bridge.js';
+import { VoiceService } from '../voice/voice-service.js';
 import { playEmotionArc } from '../renderer.js';
 
 const MAX_STREAM_HISTORY_TURNS = 10;
@@ -86,7 +87,16 @@ async function handleBatch(batch) {
             window.electronAPI.sendDiscordResponse(batch.channelId, responseObj.text);
 
             if (audioResult?.audio) {
-                await window.electronAPI.playDiscordVoiceAudio(audioResult.audio);
+                // Play the SAME synthesized bytes in two places at once: into
+                // the Discord voice channel (what people actually hear), and
+                // through the local player muted (drives MouthSync lip-sync
+                // and the emotion-arc timing, both wired to the local player's
+                // events) — using one shared audio buffer keeps the avatar's
+                // mouth movements matching what's actually audible in Discord.
+                await Promise.all([
+                    VoiceService.playMuted(audioResult),
+                    window.electronAPI.playDiscordVoiceAudio(audioResult.audio)
+                ]);
             }
         }
     } catch (error) {
