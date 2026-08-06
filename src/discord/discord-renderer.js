@@ -9,7 +9,6 @@
 import { BrainRouter } from '../llm/brain-router.js';
 import { DEFAULT_CONFIG } from '../llm/llm-interface.js';
 import { AvatarBridge } from '../avatar/avatar-bridge.js';
-import { VoiceService } from '../voice/voice-service.js';
 import { playEmotionArc } from '../renderer.js';
 
 const MAX_STREAM_HISTORY_TURNS = 10;
@@ -40,27 +39,6 @@ function formatBatchAsPrompt(messages) {
     return messages.map(m => `[${m.username}]: ${m.content}`).join('\n');
 }
 
-// VoiceService.speak() resolves once playback STARTS, not once it ends
-// (see audio-player.js's play() — it awaits audio.play() and returns right
-// after). So we must await speak() itself first (covers however long
-// synthesis takes, including MioTTS retries), THEN poll isPlaying() until
-// it actually finishes. Polling alone with a fixed initial delay is wrong —
-// synthesis can take much longer than any fixed delay, which was causing
-// "done speaking" to fire while she was still mid-synthesis, freeing the
-// queue too early and cutting her off mid-response.
-function waitUntilDonePlaying() {
-    return new Promise((resolve) => {
-        const check = () => {
-            if (!VoiceService.isPlaying()) {
-                resolve();
-            } else {
-                setTimeout(check, 300);
-            }
-        };
-        check();
-    });
-}
-
 async function handleBatch(batch) {
     const promptText = formatBatchAsPrompt(batch.messages);
     if (!promptText.trim()) {
@@ -86,10 +64,6 @@ async function handleBatch(batch) {
             streamRecentMessages.splice(0, 2);
         }
 
-        if (responseObj.text) {
-            window.electronAPI.sendDiscordResponse(batch.channelId, responseObj.text);
-        }
-
         // Fire the full emotion arc across the speech duration — same call
         // the normal chat flow makes (src/renderer.js's STATES.RESPONDING
         // handler) — this drives lip-sync/expression changes, not just the
@@ -98,9 +72,23 @@ async function handleBatch(batch) {
             playEmotionArc(responseObj.emotionArc, responseObj.text, responseObj.actionHints || {});
         }
 
-        const emotion = responseObj.emotionArc?.[0];
-        await VoiceService.speak(responseObj.text, emotion);
-        await waitUntilDonePlaying();
+        // Synthesize first, THEN send text + start voice playback together —
+        // this is what fixes the text-arrives-long-before-audio desync that
+        // came from sending text immediately and synthesizing afterward.
+        if (responseObj.text) {
+            let audioResult = null;
+            try {
+                audioResult = await window.electronAPI.ttsSynthesize(responseObj.text, { engine: 'system' });
+            } catch (synthError) {
+                console.error('[DiscordRenderer] Synthesis failed:', synthError.message);
+            }
+
+            window.electronAPI.sendDiscordResponse(batch.channelId, responseObj.text);
+
+            if (audioResult?.audio) {
+                await window.electronAPI.playDiscordVoiceAudio(audioResult.audio);
+            }
+        }
     } catch (error) {
         console.error('[DiscordRenderer] Failed to handle batch:', error.message);
     } finally {
