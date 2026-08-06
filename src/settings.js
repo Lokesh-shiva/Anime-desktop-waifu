@@ -22,7 +22,8 @@ const STORAGE_KEYS = {
     OPENROUTER_MODEL: 'waifu_openrouter_model',
     OLLAMA_MODEL: 'waifu_ollama_model',
     LOCAL_PROVIDER: 'waifu_local_provider',
-    LMSTUDIO_MODEL: 'waifu_lmstudio_model'
+    LMSTUDIO_MODEL: 'waifu_lmstudio_model',
+    LMSTUDIO_VISION_MODEL: 'waifu_lmstudio_vision_model'
 };
 
 // Model selection modes
@@ -319,6 +320,16 @@ export function setLMStudioModel(modelId) {
     console.log('[Settings] LM Studio model changed to:', modelId);
 }
 
+export function getLMStudioVisionModel() {
+    return localStorage.getItem(STORAGE_KEYS.LMSTUDIO_VISION_MODEL) || '';
+}
+
+export function setLMStudioVisionModel(modelId) {
+    localStorage.setItem(STORAGE_KEYS.LMSTUDIO_VISION_MODEL, modelId || '');
+    notifyListeners({ type: 'lmstudioVisionModel', value: modelId });
+    console.log('[Settings] LM Studio vision model changed to:', modelId);
+}
+
 export function isScreenVisionEnabled() {
     return localStorage.getItem(STORAGE_KEYS.SCREEN_VISION_ENABLED) === 'true';
 }
@@ -397,6 +408,8 @@ export const Settings = {
     setLocalProvider,
     getLMStudioModel,
     setLMStudioModel,
+    getLMStudioVisionModel,
+    setLMStudioVisionModel,
     subscribe
 };
 
