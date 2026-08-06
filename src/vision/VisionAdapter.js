@@ -5,7 +5,7 @@
  * use a different request shape and should never interfere with chat.
  */
 
-import { getCloudApiKey } from '../settings.js';
+import { getCloudApiKey, getLMStudioVisionModel } from '../settings.js';
 
 const GEMINI_VISION_ENDPOINT =
     'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
@@ -64,6 +64,44 @@ async function callGeminiVision(base64Jpeg, prompt) {
     return JSON.parse(jsonMatch[0]);
 }
 
+const LMSTUDIO_VISION_ENDPOINT = 'http://localhost:1234/v1/chat/completions';
+
+async function callLMStudioVision(base64Jpeg, prompt) {
+    const modelId = getLMStudioVisionModel();
+    if (!modelId) throw new Error('No LM Studio vision model configured');
+
+    const response = await fetch(LMSTUDIO_VISION_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(15000),
+        body: JSON.stringify({
+            model: modelId,
+            messages: [{
+                role: 'user',
+                content: [
+                    { type: 'text', text: prompt },
+                    { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Jpeg}` } }
+                ]
+            }],
+            max_tokens: 1024,
+            temperature: 0.2,
+            stream: false
+        })
+    });
+
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(`LM Studio vision error: ${err?.error?.message || response.status}`);
+    }
+
+    const data = await response.json();
+    const raw = data.choices?.[0]?.message?.content || '';
+
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('LM Studio vision response not parseable: ' + raw.slice(0, 80));
+    return JSON.parse(jsonMatch[0]);
+}
+
 export const VisionAdapter = {
     async analyzeScreen(base64Jpeg) {
         try {
@@ -74,8 +112,18 @@ export const VisionAdapter = {
                 reactionHint:  result.reactionHint  || null
             };
         } catch (e) {
-            console.warn('[Vision] Screen analysis failed:', e.message);
-            return { activity: null, shouldReact: false, reactionHint: null };
+            console.warn('[Vision] Gemini screen analysis failed, trying local:', e.message);
+            try {
+                const result = await callLMStudioVision(base64Jpeg, SCREEN_PROMPT);
+                return {
+                    activity:      result.activity      || null,
+                    shouldReact:   !!result.shouldReact,
+                    reactionHint:  result.reactionHint  || null
+                };
+            } catch (e2) {
+                console.warn('[Vision] Local screen analysis also failed:', e2.message);
+                return { activity: null, shouldReact: false, reactionHint: null };
+            }
         }
     },
 
@@ -89,8 +137,19 @@ export const VisionAdapter = {
                 reactionHint: result.reactionHint || null
             };
         } catch (e) {
-            console.warn('[Vision] Camera analysis failed:', e.message);
-            return { isPresent: true, userState: 'unknown', shouldReact: false, reactionHint: null };
+            console.warn('[Vision] Gemini camera analysis failed, trying local:', e.message);
+            try {
+                const result = await callLMStudioVision(base64Jpeg, CAMERA_PROMPT);
+                return {
+                    isPresent:    !!result.isPresent,
+                    userState:    result.userState    || 'unknown',
+                    shouldReact:  !!result.shouldReact,
+                    reactionHint: result.reactionHint || null
+                };
+            } catch (e2) {
+                console.warn('[Vision] Local camera analysis also failed:', e2.message);
+                return { isPresent: true, userState: 'unknown', shouldReact: false, reactionHint: null };
+            }
         }
     }
 };
