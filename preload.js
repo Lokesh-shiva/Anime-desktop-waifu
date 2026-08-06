@@ -45,5 +45,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onDiscordBatchReady: (callback) => ipcRenderer.on('discord-batch-ready', (_, batch) => callback(batch)),
     sendDiscordResponse: (channelId, text) => ipcRenderer.invoke('discord-send-response', channelId, text),
     discordMarkFree: () => ipcRenderer.invoke('discord-mark-free'),
+    playDiscordVoiceAudio: (base64Audio) => ipcRenderer.invoke('discord-play-voice-audio', base64Audio),
     getDiscordStatus: () => ipcRenderer.invoke('discord-get-status')
 });

@@ -548,6 +548,11 @@ ipcMain.handle('discord-mark-free', async () => {
     discordBridge.markFree();
 });
 
+ipcMain.handle('discord-play-voice-audio', async (event, base64Audio) => {
+    const buffer = Buffer.from(base64Audio, 'base64');
+    await discordBridge.playAudioBuffer(buffer);
+});
+
 ipcMain.handle('discord-get-status', async () => {
     return discordBridge.getStatus();
 });
