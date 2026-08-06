@@ -26,7 +26,9 @@ import {
     getLocalProvider,
     setLocalProvider,
     getLMStudioModel,
-    setLMStudioModel
+    setLMStudioModel,
+    getLMStudioVisionModel,
+    setLMStudioVisionModel
 } from './settings.js';
 import { ScreenWatcher } from './vision/ScreenWatcher.js';
 import { CameraWatcher } from './vision/CameraWatcher.js';
@@ -1074,6 +1076,19 @@ function initSettings() {
     const screenVisionToggle = document.getElementById('screen-vision-toggle');
     const cameraVisionToggle = document.getElementById('camera-vision-toggle');
 
+    // LM Studio vision fallback model
+    const lmstudioVisionModelInput = document.getElementById('lmstudio-vision-model-input');
+    if (lmstudioVisionModelInput) lmstudioVisionModelInput.value = getLMStudioVisionModel();
+    let lmstudioVisionModelTimeout;
+    if (lmstudioVisionModelInput) {
+        lmstudioVisionModelInput.addEventListener('input', (e) => {
+            clearTimeout(lmstudioVisionModelTimeout);
+            lmstudioVisionModelTimeout = setTimeout(() => {
+                setLMStudioVisionModel(e.target.value.trim());
+            }, 500);
+        });
+    }
+
     if (screenVisionToggle) {
         screenVisionToggle.checked = isScreenVisionEnabled();
         screenVisionToggle.addEventListener('change', (e) => {
@@ -1690,6 +1705,7 @@ const ptt = {
     _VAD_SILENCE_MS: 1200,   // stop after 1.2s of continuous silence
     _VAD_GRACE_MS: 600,      // ignore silence during first 600ms (let them start speaking)
     _elapsedMs: 0,
+    _peakRms: 0,             // diagnostic: highest RMS seen this recording
 
     _startVAD() {
         if (!this.stream) return;
@@ -1702,6 +1718,7 @@ const ptt = {
         const buf = new Float32Array(this._analyser.fftSize);
         this._silenceMs = 0;
         this._elapsedMs = 0;
+        this._peakRms = 0;
         let lastTime = performance.now();
 
         const tick = () => {
@@ -1715,6 +1732,7 @@ const ptt = {
             let sum = 0;
             for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
             const rms = Math.sqrt(sum / buf.length);
+            if (rms > this._peakRms) this._peakRms = rms;
 
             if (this._elapsedMs < this._VAD_GRACE_MS) {
                 // grace period — reset silence clock
@@ -1755,6 +1773,8 @@ const ptt = {
 
         try {
             this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const track = this.stream.getAudioTracks()[0];
+            console.log('[PTT] Using mic device:', track?.label || '(no label — permission not yet fully granted?)', track?.getSettings?.());
         } catch (err) {
             console.error('[PTT] Mic access denied:', err);
             micBtn?.classList.add('error');
@@ -1814,6 +1834,11 @@ const ptt = {
     },
 
     async _onStop() {
+        console.log(`[PTT] Peak mic RMS this recording: ${this._peakRms.toFixed(4)} (VAD threshold: ${this._VAD_THRESHOLD})`);
+        if (this._peakRms < this._VAD_THRESHOLD) {
+            console.warn('[PTT] Peak RMS never crossed the silence threshold — mic input may be too quiet or the wrong device is selected.');
+        }
+
         if (this.aborted || this.chunks.length === 0) return;
 
         const mimeType = this.mediaRecorder?.mimeType || 'audio/webm';

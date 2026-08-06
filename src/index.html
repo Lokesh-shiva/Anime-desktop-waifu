@@ -298,6 +298,13 @@
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
             </span>
           </label>
+
+          <div id="lmstudio-vision-model-group" style="margin-top:12px;">
+            <label class="section-label" for="lmstudio-vision-model-input">Local Vision Fallback (LM Studio)</label>
+            <input type="text" id="lmstudio-vision-model-input" class="glass-input"
+              placeholder="e.g. qwen2.5-vl-3b-instruct" autocomplete="off">
+            <p class="hint-text" style="margin-top:5px;">Used automatically if Gemini fails or hits its rate limit. Must match the ID shown at localhost:1234/v1/models. Leave blank to disable.</p>
+          </div>
         </div>
 
       </div><!-- /tab-avatar -->
