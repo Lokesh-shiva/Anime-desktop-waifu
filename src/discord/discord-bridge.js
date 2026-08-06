@@ -5,7 +5,9 @@
  * into discord.js internals directly.
  */
 
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+
+const EMBED_COLOR = 0xFF9EC4; // soft pink
 
 const MAX_MESSAGE_LENGTH = 300;
 const RATE_LIMIT_WINDOW_MS = 1000;
@@ -174,7 +176,11 @@ async function sendResponse(channelId, text) {
     try {
         const channel = await client.channels.fetch(channelId);
         if (channel && channel.isTextBased()) {
-            await channel.send(text);
+            const embed = new EmbedBuilder()
+                .setColor(EMBED_COLOR)
+                .setAuthor({ name: 'Miko' })
+                .setDescription(text);
+            await channel.send({ embeds: [embed] });
         }
     } catch (err) {
         console.error('[DiscordBridge] Failed to send response:', err.message);
