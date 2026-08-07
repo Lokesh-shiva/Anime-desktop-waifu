@@ -16,6 +16,7 @@ const {
     StreamType,
 } = require('@discordjs/voice');
 const { Readable } = require('stream');
+const discordUserMemory = require('./discord-user-memory.js');
 
 const EMBED_COLOR = 0xFF9EC4; // soft pink
 
@@ -37,7 +38,8 @@ let activeChannelId = null;
 let voiceConnection = null;
 let audioPlayer = null;
 let busy = false;
-let buffer = []; // [{ username, content }]
+let buffer = []; // [{ username, userId, content }]
+let lastBufferedMessageId = null;
 let lastMessageAtByUser = new Map(); // userId -> timestamp ms
 let debounceTimer = null;
 let batchReadyCallback = null;
@@ -126,10 +128,12 @@ function flush() {
     if (!batchReadyCallback) return;
 
     const messages = buffer;
+    const replyToMessageId = lastBufferedMessageId;
     buffer = [];
+    lastBufferedMessageId = null;
     busy = true; // set synchronously to prevent a second flush before the
                  // renderer's generation actually starts
-    batchReadyCallback({ channelId: activeChannelId, messages });
+    batchReadyCallback({ channelId: activeChannelId, messages, replyToMessageId });
 }
 
 // Called whenever a new message is buffered (and we're free to eventually
@@ -224,7 +228,10 @@ function start(token) {
         // styling a display name has comes through as-is — plain JS strings
         // handle that natively, nothing special needed.
         const displayName = message.member?.displayName || message.author.username;
-        buffer.push({ username: displayName, content });
+        const userId = message.author.id;
+        discordUserMemory.recordMessage(userId, displayName, content);
+        buffer.push({ username: displayName, userId, content });
+        lastBufferedMessageId = message.id;
         scheduleFlush();
     });
 
@@ -258,7 +265,7 @@ function onBatchReady(callback) {
     batchReadyCallback = callback;
 }
 
-async function sendResponse(channelId, text) {
+async function sendResponse(channelId, text, replyToMessageId = null) {
     if (!client || !channelId) return;
     try {
         const channel = await client.channels.fetch(channelId);
@@ -267,7 +274,11 @@ async function sendResponse(channelId, text) {
                 .setColor(EMBED_COLOR)
                 .setAuthor({ name: 'Miko' })
                 .setDescription(text);
-            await channel.send({ embeds: [embed] });
+            const options = { embeds: [embed] };
+            if (replyToMessageId) {
+                options.reply = { messageReference: replyToMessageId, failIfNotExists: false };
+            }
+            await channel.send(options);
         }
     } catch (err) {
         console.error('[DiscordBridge] Failed to send response:', err.message);
@@ -286,4 +297,8 @@ function getStatus() {
     };
 }
 
-module.exports = { start, stop, onBatchReady, sendResponse, markFree, getStatus, playAudioBuffer };
+function getUserTierInfo(userId) {
+    return discordUserMemory.getTierInfo(userId);
+}
+
+module.exports = { start, stop, onBatchReady, sendResponse, markFree, getStatus, playAudioBuffer, getUserTierInfo };
