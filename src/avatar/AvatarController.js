@@ -841,6 +841,15 @@ export class AvatarController {
     }
 
     /**
+     * Handle explicit speaking-session start/stop — see MouthSync.setExternalControl().
+     * @param {boolean} active
+     */
+    handleExternalMouthControl(active) {
+        if (!this.isEnabled) return;
+        this.mouthSync.setExternalControl(active);
+    }
+
+    /**
      * Handle live cursor tracking inputs
      * @param {Object} influence - Map of param ID to value
      */

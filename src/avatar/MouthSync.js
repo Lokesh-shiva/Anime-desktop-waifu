@@ -13,6 +13,12 @@ export class MouthSync {
         this.smoothingFactor = 0.3; // Low-pass filter (0 to 1, higher = faster)
         this.maxOpen = 0.85;        // Clamp max open
         this.isSpeaking = false;
+        // Explicit speaking-session flag, set for the WHOLE duration between
+        // MouthSync.start()/stop() on the sending side — unlike isSpeaking
+        // (which flickers false on any single below-threshold frame), this
+        // doesn't drop out during natural pauses mid-sentence, so emotion
+        // presets can't steal MOUTH_OPEN_Y back mid-speech.
+        this.externallyControlled = false;
 
         // Delay compensation buffer
         this.amplitudeBuffer = [];
@@ -57,11 +63,22 @@ export class MouthSync {
     }
 
     /**
+     * Mark an entire speaking session as active/inactive — driven by the
+     * explicit start()/stop() signal from the audio source, not per-frame
+     * amplitude, so natural pauses mid-sentence don't cede mouth control
+     * back to emotion presets.
+     * @param {boolean} active
+     */
+    setExternalControl(active) {
+        this.externallyControlled = active;
+    }
+
+    /**
      * Determine if mouth is currently syncing
      * @returns {boolean}
      */
     isActive() {
-        return this.isSpeaking || this.currentAmplitude > 0.01;
+        return this.externallyControlled || this.isSpeaking || this.currentAmplitude > 0.01;
     }
 
     /**

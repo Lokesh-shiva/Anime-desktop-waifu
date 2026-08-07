@@ -621,6 +621,15 @@ if (window.avatarAPI) {
             avatarController.handleMouthAmplitude(amp);
         });
     }
+
+    // Explicit speaking-session start/stop — was previously sent but never
+    // listened to here, so emotion presets could steal MOUTH_OPEN_Y back
+    // during any single below-threshold amplitude frame mid-speech.
+    if (window.avatarAPI.onExternalMouthControl) {
+        window.avatarAPI.onExternalMouthControl((active) => {
+            avatarController.handleExternalMouthControl(active);
+        });
+    }
 }
 
 // Mouse event listeners for cursor tracking
