@@ -15,6 +15,14 @@ app.commandLine.appendSwitch('force_high_performance_gpu');
 // Disable frame rate throttling when window is in background / occluded
 app.commandLine.appendSwitch('disable-frame-rate-limit');
 app.commandLine.appendSwitch('disable-gpu-vsync');
+// Chromium normally keeps AudioContext processing throttled/inactive until a
+// user gesture (click/keypress) — fine for random webpages, wrong for a
+// trusted local desktop app. Discord-triggered responses fire from a
+// background event with no recent gesture in this window, which was
+// starving the lip-sync AnalyserNode of real data and forcing it into its
+// simulated-wobble fallback. This makes AudioContext fully active from the
+// start regardless of gesture history.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 let mainWindow = null;
 let avatarWindow = null;
