@@ -3,6 +3,12 @@
  * Handles audio playback and amplitude analysis for mouth sync
  * Uses HTML5 Audio for compatibility with various WAV formats
  */
+
+// Near-zero rather than exactly 0 for "muted" output — a hard-zero-gain audio
+// graph can get optimized/throttled by the browser, starving the analyser of
+// live data. This value is inaudible but keeps the graph genuinely live.
+const MUTED_GAIN = 0.00001;
+
 export class AudioPlayer {
     constructor() {
         this.audio = null;
@@ -33,13 +39,7 @@ export class AudioPlayer {
      */
     setMuted(muted) {
         this.muted = muted;
-        // Near-zero rather than exactly 0 — a hard-zero-output audio graph
-        // can get optimized/throttled by the browser, which starved the
-        // analyser of live data during "muted" playback and misfired the
-        // flat-signal guard below (fake continuous mouth-wiggle instead of
-        // natural open/close). This value is inaudible but keeps the graph
-        // genuinely live.
-        if (this.gainNode) this.gainNode.gain.value = muted ? 0.00001 : 1;
+        if (this.gainNode) this.gainNode.gain.value = muted ? MUTED_GAIN : 1;
     }
 
     /**
@@ -149,7 +149,7 @@ export class AudioPlayer {
 
         if (!this.gainNode) {
             this.gainNode = this.audioContext.createGain();
-            this.gainNode.gain.value = this.muted ? 0 : 1;
+            this.gainNode.gain.value = this.muted ? MUTED_GAIN : 1;
             this.analyser.connect(this.gainNode);
             this.gainNode.connect(this.audioContext.destination);
         }
