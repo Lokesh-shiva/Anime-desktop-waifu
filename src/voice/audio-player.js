@@ -33,7 +33,13 @@ export class AudioPlayer {
      */
     setMuted(muted) {
         this.muted = muted;
-        if (this.gainNode) this.gainNode.gain.value = muted ? 0 : 1;
+        // Near-zero rather than exactly 0 — a hard-zero-output audio graph
+        // can get optimized/throttled by the browser, which starved the
+        // analyser of live data during "muted" playback and misfired the
+        // flat-signal guard below (fake continuous mouth-wiggle instead of
+        // natural open/close). This value is inaudible but keeps the graph
+        // genuinely live.
+        if (this.gainNode) this.gainNode.gain.value = muted ? 0.00001 : 1;
     }
 
     /**
