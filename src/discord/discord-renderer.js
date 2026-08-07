@@ -32,16 +32,42 @@ Emoji: you can use them, but sparingly — one or two per message tops, and
 only real ones you can type directly (😄 😭 💀 🔥 👀 etc.), never Discord's
 :custom_emoji_name: syntax. You don't know what emojis actually exist on
 this server, so guessing a custom name just posts broken text. Stick to
-standard Unicode emoji, or none at all if the line doesn't need one.`;
+standard Unicode emoji, or none at all if the line doesn't need one.
+
+Each speaker below is tagged with how well you know them and their name if
+you've learned it. Brand new people are meeting you for the first time —
+you don't know them at all, so introduce yourself naturally and let their
+name come up organically if it fits, don't interrogate them. Regulars get
+your relaxed, familiar side — no need to re-introduce yourself or explain
+who you are to them. Calibrate warmth per-person even within one reply if
+the batch has a mix of new and familiar people.`;
 
 let streamRecentMessages = []; // [{role, content}] — separate from memoryManager.recentMessages
 
-function formatBatchAsPrompt(messages) {
-    return messages.map(m => `[${m.username}]: ${m.content}`).join('\n');
+const TIER_DESCRIPTIONS = {
+    new: 'brand new, never talked before',
+    acquaintance: 'you\'ve talked a bit before',
+    regular: 'a regular, you know them well',
+};
+
+async function formatBatchAsPrompt(messages) {
+    const lines = await Promise.all(messages.map(async (m) => {
+        let tag = m.username;
+        try {
+            const info = await window.electronAPI.getDiscordUserTier(m.userId);
+            const desc = TIER_DESCRIPTIONS[info.tier] || TIER_DESCRIPTIONS.new;
+            const nameNote = info.knownName ? `, name: ${info.knownName}` : '';
+            tag = `${m.username} (${desc}${nameNote})`;
+        } catch (e) {
+            console.warn('[DiscordRenderer] Could not get tier info for', m.username, e.message);
+        }
+        return `[${tag}]: ${m.content}`;
+    }));
+    return lines.join('\n');
 }
 
 async function handleBatch(batch) {
-    const promptText = formatBatchAsPrompt(batch.messages);
+    const promptText = await formatBatchAsPrompt(batch.messages);
     if (!promptText.trim()) {
         window.electronAPI.discordMarkFree();
         return;
@@ -84,7 +110,7 @@ async function handleBatch(batch) {
                 console.error('[DiscordRenderer] Synthesis failed:', synthError.message);
             }
 
-            window.electronAPI.sendDiscordResponse(batch.channelId, responseObj.text);
+            window.electronAPI.sendDiscordResponse(batch.channelId, responseObj.text, batch.replyToMessageId);
 
             if (audioResult?.audio) {
                 // Play the SAME synthesized bytes in two places at once: into

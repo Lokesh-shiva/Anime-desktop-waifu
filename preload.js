@@ -43,8 +43,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getDiscordConfig: () => ipcRenderer.invoke('get-discord-config'),
     saveDiscordConfig: (config) => ipcRenderer.invoke('save-discord-config', config),
     onDiscordBatchReady: (callback) => ipcRenderer.on('discord-batch-ready', (_, batch) => callback(batch)),
-    sendDiscordResponse: (channelId, text) => ipcRenderer.invoke('discord-send-response', channelId, text),
+    sendDiscordResponse: (channelId, text, replyToMessageId) => ipcRenderer.invoke('discord-send-response', channelId, text, replyToMessageId),
     discordMarkFree: () => ipcRenderer.invoke('discord-mark-free'),
     playDiscordVoiceAudio: (base64Audio) => ipcRenderer.invoke('discord-play-voice-audio', base64Audio),
-    getDiscordStatus: () => ipcRenderer.invoke('discord-get-status')
+    getDiscordStatus: () => ipcRenderer.invoke('discord-get-status'),
+    getDiscordUserTier: (userId) => ipcRenderer.invoke('discord-get-user-tier', userId)
 });

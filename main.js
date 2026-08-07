@@ -540,8 +540,8 @@ ipcMain.handle('save-discord-config', async (event, config) => {
     }
 });
 
-ipcMain.handle('discord-send-response', async (event, channelId, text) => {
-    await discordBridge.sendResponse(channelId, text);
+ipcMain.handle('discord-send-response', async (event, channelId, text, replyToMessageId) => {
+    await discordBridge.sendResponse(channelId, text, replyToMessageId);
 });
 
 ipcMain.handle('discord-mark-free', async () => {
@@ -555,6 +555,10 @@ ipcMain.handle('discord-play-voice-audio', async (event, base64Audio) => {
 
 ipcMain.handle('discord-get-status', async () => {
     return discordBridge.getStatus();
+});
+
+ipcMain.handle('discord-get-user-tier', async (event, userId) => {
+    return discordBridge.getUserTierInfo(userId);
 });
 
 // ============================================
