@@ -11,6 +11,18 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.abspath("."))
 sys.path.insert(0, os.path.abspath("GPT_SoVITS"))
 
+# GPT-SoVITS's English text frontend needs two NLTK resources
+# (averaged_perceptron_tagger_eng, cmudict) and lookups for these have
+# intermittently failed even when the files exist in the user-level
+# %APPDATA%\nltk_data — cause unconfirmed, but reproduces across both a
+# sandboxed launch and a normal one. Bundling a known-good copy inside this
+# sidecar's own directory and pointing NLTK_DATA at it removes the
+# dependency on whatever's in the user-level location entirely. This is a
+# plain env var — no nltk import here, so it can't trigger the cwd-import
+# security block nltk itself raises when imported too early (see git log
+# for the reverted attempt that hit this).
+os.environ["NLTK_DATA"] = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nltk_data")
+
 import torch
 import soundfile as sf
 import torchaudio
